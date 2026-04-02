@@ -1,0 +1,46 @@
+create table if not exists products (
+  id bigserial primary key,
+  sku_code text not null unique,
+  handlebar text,
+  speed text,
+  rack text,
+  bike_type text,
+  colour text,
+  light text,
+  seatpost_length text,
+  saddle text,
+  description text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists countries (
+  id bigserial primary key,
+  country text not null unique,
+  region text not null,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists availability (
+  product_id bigint not null references products(id) on delete cascade,
+  country_id bigint not null references countries(id) on delete cascade,
+  available boolean not null default false,
+  updated_at timestamptz not null default now(),
+  primary key (product_id, country_id)
+);
+
+create table if not exists sku_rules (
+  id bigserial primary key,
+  digit_position integer not null,
+  option_name text not null,
+  code_value text not null,
+  choice_value text not null,
+  description_element text
+);
+
+create table if not exists setup_options (
+  id bigserial primary key,
+  option_name text not null,
+  choice_value text not null,
+  sort_order integer not null default 0
+);
