@@ -1,181 +1,201 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
-import type { Country, MatrixProductColumn, MatrixRow } from '@/lib/types';
 
-const MATRIX_COLUMN_PREFS_KEY = 'matrix.visible-columns.v1';
-
-const productColumns: Array<{ key: MatrixProductColumn; label: string }> = [
-  { key: 'sku_code', label: 'SKU' },
-  { key: 'handlebar', label: 'Handlebar' },
-  { key: 'speed', label: 'Speed' },
-  { key: 'rack', label: 'Rack' },
-  { key: 'bike_type', label: 'Bike type' },
-  { key: 'colour', label: 'Colour' },
-  { key: 'light', label: 'Light' },
-  { key: 'seatpost_length', label: 'Seatpost' },
-  { key: 'saddle', label: 'Saddle' },
-  { key: 'description', label: 'Description' },
-  { key: 'bc_status', label: 'BC status' }
-];
-
-const defaultVisibleProductColumns = new Set<MatrixProductColumn>(productColumns.map((c) => c.key));
-const emptyRow = { sku_code: '', handlebar: '', speed: '', rack: '', bike_type: '', colour: '', light: '', seatpost_length: '', saddle: '', description: '', bc_status: '' as const };
-
-type FilterMode = 'contains' | 'equals' | 'blank' | 'not_blank';
-type ColumnFilter = { mode: FilterMode; value: string };
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { Country, MatrixRow } from '@/lib/types';
 
 type MatrixClientRow = MatrixRow & { _clientKey: string };
 
-function getDistinct(rows: MatrixClientRow[], key: MatrixProductColumn) {
-  return Array.from(new Set(rows.map((r) => String(r[key] || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+type MatrixFilters = {
+  sku: string;
+  handlebar: string[];
+  speed: string[];
+  rack: string[];
+  bike_type: string[];
+  country: string[];
+  bc_status: Array<'ok' | 'nok'>;
+};
+
+type AddRowForm = {
+  sku_code: string;
+  handlebar: string;
+  speed: string;
+  rack: string;
+  bike_type: string;
+  colour: string;
+  light: string;
+  seatpost_length: string;
+  saddle: string;
+  countries: string[];
+};
+
+const emptyFilters: MatrixFilters = {
+  sku: '',
+  handlebar: [],
+  speed: [],
+  rack: [],
+  bike_type: [],
+  country: [],
+  bc_status: []
+};
+
+const emptyAddForm: AddRowForm = {
+  sku_code: '',
+  handlebar: '',
+  speed: '',
+  rack: '',
+  bike_type: '',
+  colour: '',
+  light: '',
+  seatpost_length: '',
+  saddle: '',
+  countries: []
+};
+
+function normalizeBcStatus(raw: string): 'ok' | 'nok' | '' {
+  const lowered = String(raw || '').trim().toLowerCase();
+  if (lowered === 'ok') return 'ok';
+  if (lowered === 'nok') return 'nok';
+  return '';
+}
+
+function deriveDescription(row: MatrixClientRow) {
+  const parts = [row.bike_type, row.handlebar, row.speed, row.rack, row.colour, row.light, row.seatpost_length, row.saddle]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+  return parts.join(' · ');
 }
 
 export default function MatrixPage() {
   const [rows, setRows] = useState<MatrixClientRow[]>([]);
   const [countries, setCountries] = useState<Country[]>([]);
-  const [status, setStatus] = useState('');
-  const [newCountry, setNewCountry] = useState({ country: '', region: '' });
   const [permissions, setPermissions] = useState<string[]>([]);
-  const [bulkForm, setBulkForm] = useState({ country_id: 0, available: true });
-  const [showColumnsMenu, setShowColumnsMenu] = useState(false);
-  const [visibleProductColumns, setVisibleProductColumns] = useState<Set<MatrixProductColumn>>(defaultVisibleProductColumns);
-  const [visibleCountryIds, setVisibleCountryIds] = useState<Set<number>>(new Set());
-  const [filters, setFilters] = useState<Record<string, ColumnFilter>>({});
+  const [filters, setFilters] = useState<MatrixFilters>(emptyFilters);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [dirtyKeys, setDirtyKeys] = useState<Record<string, boolean>>({});
-  const [saveSummary, setSaveSummary] = useState<string>('');
-  const [bcSummary, setBcSummary] = useState<string>('');
+  const [status, setStatus] = useState('');
+  const [saveSummary, setSaveSummary] = useState('');
+  const [bcSummary, setBcSummary] = useState('');
   const [isCheckingBc, setIsCheckingBc] = useState(false);
+  const [isFiltering, setIsFiltering] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [addRowForm, setAddRowForm] = useState<AddRowForm>(emptyAddForm);
+  const [bulkCountryId, setBulkCountryId] = useState(0);
 
-  async function load() {
+  const canSingleUpdate = permissions.includes('matrix.update.single');
+  const canBulkUpdate = permissions.includes('matrix.update.bulk');
+
+  const load = useCallback(async () => {
     const [res, meRes] = await Promise.all([fetch('/api/matrix'), fetch('/api/me')]);
     const data = await res.json();
     const me = await meRes.json();
-    const loadedRows = (data.rows || []).map((row: MatrixRow) => ({ ...row, _clientKey: row.id ? `id-${row.id}` : `new-${crypto.randomUUID()}` }));
-    const loadedCountries = data.countries || [];
+    const loadedRows = (data.rows || []).map((row: MatrixRow) => ({
+      ...row,
+      bc_status: normalizeBcStatus(row.bc_status),
+      _clientKey: row.id ? `id-${row.id}` : `new-${crypto.randomUUID()}`
+    }));
+
     setRows(loadedRows);
-    setCountries(loadedCountries);
+    setCountries(data.countries || []);
     setPermissions(me.permissions || []);
-    setVisibleCountryIds((current) => (current.size ? current : new Set(loadedCountries.map((c: Country) => c.id))));
+    setSelectedKeys(new Set());
     setDirtyKeys({});
-  }
-
-  useEffect(() => { load(); }, []);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(MATRIX_COLUMN_PREFS_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed.product)) {
-        setVisibleProductColumns(new Set(parsed.product.filter((key: string) => productColumns.some((c) => c.key === key))));
-      }
-      if (Array.isArray(parsed.countryIds)) {
-        setVisibleCountryIds(new Set(parsed.countryIds.map((n: unknown) => Number(n)).filter((n: number) => n > 0)));
-      }
-    } catch {
-      // ignore invalid local storage values
-    }
   }, []);
 
+  useEffect(() => { load(); }, [load]);
+
   useEffect(() => {
-    localStorage.setItem(MATRIX_COLUMN_PREFS_KEY, JSON.stringify({ product: Array.from(visibleProductColumns), countryIds: Array.from(visibleCountryIds) }));
-  }, [visibleProductColumns, visibleCountryIds]);
+    setIsFiltering(true);
+    const timer = setTimeout(() => setIsFiltering(false), 120);
+    return () => clearTimeout(timer);
+  }, [filters]);
 
-  const canSingleUpdate = permissions.includes('matrix.update.single');
-  const canAddCountry = permissions.includes('country.add');
-  const canBulkUpdate = permissions.includes('matrix.update.bulk');
-
-  function updateRow(rowKey: string, updater: (row: MatrixClientRow) => MatrixClientRow) {
-    setRows((all) => all.map((r) => (r._clientKey === rowKey ? updater(r) : r)));
-    setDirtyKeys((all) => ({ ...all, [rowKey]: true }));
-  }
-
-  async function saveRow(row: MatrixClientRow) {
-    if (!canSingleUpdate) return;
-    setStatus('Saving...');
-    const res = await fetch('/api/matrix', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ product: row, availability: row.availability || {} })
-    });
-    const payload = await res.json().catch(() => ({}));
-    setStatus(res.ok ? 'Saved' : payload.error || 'Save failed');
-    await load();
-  }
-
-  async function saveAllDirtyRows() {
-    if (!canSingleUpdate) return;
-    const dirtyRows = rows.filter((r) => dirtyKeys[r._clientKey]);
-    if (!dirtyRows.length) {
-      setSaveSummary('No changed rows to save.');
-      return;
-    }
-    setStatus('Saving all changed rows...');
-    const res = await fetch('/api/matrix/save-all', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rows: dirtyRows.map((row) => ({ rowKey: row._clientKey, product: row, availability: row.availability })) })
-    });
-    const data = await res.json();
-    const summary = `Save all complete: ${data.succeeded}/${data.attempted} saved${data.failed ? `, ${data.failed} failed` : ''}.`;
-    setSaveSummary(data.failed ? `${summary} ${data.failures.map((f: any) => `${f.rowKey}: ${f.reason}`).join(' | ')}` : summary);
-    setStatus(data.failed ? 'Save all finished with validation errors' : 'Save all complete');
-    await load();
-  }
-
-  async function addCountry() {
-    if (!canAddCountry) return;
-    if (!newCountry.country || !newCountry.region) return;
-    await fetch('/api/countries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newCountry) });
-    setNewCountry({ country: '', region: '' });
-    await load();
-  }
-
-  function matchesFilter(rawValue: string, filter: ColumnFilter) {
-    const value = String(rawValue || '').trim();
-    if (filter.mode === 'blank') return !value;
-    if (filter.mode === 'not_blank') return !!value;
-    if (filter.mode === 'equals') return value.toLowerCase() === filter.value.trim().toLowerCase();
-    return value.toLowerCase().includes(filter.value.trim().toLowerCase());
-  }
+  const distinctOptions = useMemo(() => {
+    const fieldDistinct = (key: 'handlebar' | 'speed' | 'rack' | 'bike_type') =>
+      Array.from(new Set(rows.map((row) => String(row[key] || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+    return {
+      handlebar: fieldDistinct('handlebar'),
+      speed: fieldDistinct('speed'),
+      rack: fieldDistinct('rack'),
+      bike_type: fieldDistinct('bike_type')
+    };
+  }, [rows]);
 
   const filteredRows = useMemo(() => {
-    const activeFilters = Object.entries(filters).filter(([, f]) => (f.mode === 'blank' || f.mode === 'not_blank' || f.value.trim()));
-    if (!activeFilters.length) return rows;
+    const skuSearch = filters.sku.trim().toLowerCase();
     return rows.filter((row) => {
-      return activeFilters.every(([columnKey, filter]) => {
-        if (columnKey.startsWith('country:')) {
-          const countryName = columnKey.replace('country:', '');
-          const available = row.availability?.[countryName];
-          if (filter.mode === 'equals') {
-            return filter.value === 'yes' ? !!available : !available;
-          }
-          return true;
-        }
-        return matchesFilter(String((row as any)[columnKey] || ''), filter);
-      });
+      const rowStatus = normalizeBcStatus(row.bc_status);
+      if (skuSearch && !String(row.sku_code || '').toLowerCase().includes(skuSearch)) return false;
+      if (filters.handlebar.length && !filters.handlebar.includes(String(row.handlebar || ''))) return false;
+      if (filters.speed.length && !filters.speed.includes(String(row.speed || ''))) return false;
+      if (filters.rack.length && !filters.rack.includes(String(row.rack || ''))) return false;
+      if (filters.bike_type.length && !filters.bike_type.includes(String(row.bike_type || ''))) return false;
+      if (filters.bc_status.length && !filters.bc_status.includes(rowStatus as 'ok' | 'nok')) return false;
+
+      if (filters.country.length) {
+        const availableCountries = filters.country.filter((country) => !!row.availability?.[country]);
+        if (!availableCountries.length) return false;
+      }
+
+      return true;
     });
   }, [rows, filters]);
 
-  const visibleCountries = countries.filter((c) => visibleCountryIds.has(c.id));
-  const impactedRows = filteredRows.filter((r) => r.id > 0).length;
-  const activeFilterCount = Object.values(filters).filter((f) => (f.mode === 'blank' || f.mode === 'not_blank' || f.value.trim())).length;
+  const selectedInFiltered = useMemo(() => filteredRows.filter((row) => selectedKeys.has(row._clientKey)), [filteredRows, selectedKeys]);
+  const selectedCount = selectedInFiltered.length;
+  const targetRows = selectedCount ? selectedInFiltered : filteredRows;
 
-  async function bulkUpdate() {
-    if (!canBulkUpdate || !bulkForm.country_id) return;
-    setStatus('Bulk updating...');
+  function toggleMultiFilter(key: 'handlebar' | 'speed' | 'rack' | 'bike_type' | 'country' | 'bc_status', value: string) {
+    setFilters((current) => {
+      const currentValues = current[key] as string[];
+      const exists = currentValues.includes(value);
+      return {
+        ...current,
+        [key]: exists ? currentValues.filter((item) => item !== value) : [...currentValues, value]
+      } as MatrixFilters;
+    });
+  }
+
+  function updateRow(rowKey: string, updater: (row: MatrixClientRow) => MatrixClientRow) {
+    setRows((all) => all.map((row) => (row._clientKey === rowKey ? updater(row) : row)));
+    setDirtyKeys((all) => ({ ...all, [rowKey]: true }));
+  }
+
+  function toggleCountryInline(row: MatrixClientRow, country: string) {
+    updateRow(row._clientKey, (current) => ({
+      ...current,
+      availability: { ...(current.availability || {}), [country]: !current.availability?.[country] }
+    }));
+  }
+
+  function getTargetRowsForActions() {
+    return targetRows.filter((row) => row.id > 0);
+  }
+
+  async function runBulkCountryUpdate(available: boolean) {
+    if (!canBulkUpdate || !bulkCountryId) return;
+    const actionRows = getTargetRowsForActions();
+    if (!actionRows.length) {
+      setStatus('No persisted rows in scope for bulk country update.');
+      return;
+    }
+
+    setStatus(`Applying ${available ? 'assign' : 'remove'} country to ${actionRows.length} row(s)...`);
     const res = await fetch('/api/matrix/bulk-update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...bulkForm, product_ids: impactedRows ? filteredRows.filter((r) => r.id > 0).map((r) => r.id) : undefined })
+      body: JSON.stringify({
+        country_id: bulkCountryId,
+        available,
+        product_ids: actionRows.map((row) => row.id)
+      })
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     setStatus(res.ok ? `Bulk update done (${data.updated} rows)` : data.error || 'Bulk update failed');
     await load();
   }
 
   async function checkBcStatus() {
-    const targetRows = filteredRows;
     if (!targetRows.length) {
       setBcSummary('No rows in scope to check.');
       return;
@@ -188,173 +208,304 @@ export default function MatrixPage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        scope: activeFilterCount ? 'filtered_rows' : 'working_set',
+        scope: selectedCount ? 'selected_rows' : 'filtered_rows',
         rows: targetRows.map((row) => ({ id: row.id, sku_code: row.sku_code }))
       })
     });
 
     const data = await res.json().catch(() => ({}));
-    const apiResults = Array.isArray(data.results) ? data.results : [];
-    const resultBySku = new Map<string, any>(apiResults.map((result: any) => [String(result.inputSku || ''), result]));
+    const results = Array.isArray(data.results) ? data.results : [];
+    const resultBySku = new Map<string, any>(results.map((result: any) => [String(result.inputSku || ''), result]));
 
     setRows((allRows) => allRows.map((row) => {
       const result = resultBySku.get(String(row.sku_code || '').trim());
       if (!result || result.error) return row;
-      return { ...row, bc_status: result.bcStatus };
+      return { ...row, bc_status: normalizeBcStatus(result.bcStatus) };
     }));
 
     if (data.summary) {
-      setBcSummary(
-        `BigCommerce check complete: ${data.summary.checked} checked, ${data.summary.found} found, ${data.summary.notFound} not found, ${data.summary.failed} failed.` +
-        (data.globalErrorMessage ? ` Error: ${data.globalErrorMessage}` : '')
-      );
+      setBcSummary(`BigCommerce check complete: ${data.summary.checked} checked, ${data.summary.found} found, ${data.summary.notFound} not found.`);
     } else {
       setBcSummary(data.error || 'BigCommerce check finished with no summary.');
     }
-
     setIsCheckingBc(false);
   }
 
-  function setFilter(column: string, patch: Partial<ColumnFilter>) {
-    setFilters((all) => ({ ...all, [column]: { mode: all[column]?.mode || 'contains', value: all[column]?.value || '', ...patch } }));
+  async function saveAllDirtyRows() {
+    if (!canSingleUpdate) return;
+    const dirtyRows = rows.filter((row) => dirtyKeys[row._clientKey]);
+    if (!dirtyRows.length) {
+      setSaveSummary('No changed rows to save.');
+      return;
+    }
+
+    setIsSaving(true);
+    setStatus(`Saving ${dirtyRows.length} changed row(s)...`);
+
+    const res = await fetch('/api/matrix/save-all', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        rows: dirtyRows.map((row) => ({ rowKey: row._clientKey, product: row, availability: row.availability }))
+      })
+    });
+
+    const data = await res.json().catch(() => ({}));
+    const summary = `Save complete: ${data.succeeded || 0}/${data.attempted || dirtyRows.length} saved${data.failed ? `, ${data.failed} failed` : ''}.`;
+    setSaveSummary(summary);
+    setStatus(data.failed ? 'Save finished with validation errors' : 'Save complete');
+    setIsSaving(false);
+    await load();
   }
 
-  return <div className="page">
-    <h2>Matrix</h2>
-    <div className="note">Main maintenance screen. Bulk update only affects rows currently returned by active filters.</div>
-    <div className="toolbar" style={{ flexWrap: 'wrap' }}>
-      <button className="primary" disabled={!canSingleUpdate} onClick={() => setRows([{ id: 0, ...emptyRow, availability: {}, _clientKey: `new-${crypto.randomUUID()}` } as MatrixClientRow, ...rows])}>+ Add Row</button>
-      <button className="primary" disabled={!canSingleUpdate} onClick={saveAllDirtyRows}>Save all changed rows</button>
-      <button onClick={() => setShowColumnsMenu((v) => !v)}>Columns</button>
-      <button onClick={() => setFilters({})}>Reset all filters</button>
-      <input placeholder="Country" value={newCountry.country} disabled={!canAddCountry} onChange={(e) => setNewCountry((v) => ({ ...v, country: e.target.value }))} />
-      <input placeholder="Region" value={newCountry.region} disabled={!canAddCountry} onChange={(e) => setNewCountry((v) => ({ ...v, region: e.target.value }))} />
-      <button disabled={!canAddCountry} onClick={addCountry}>+ Add Country</button>
-      <span className="subtle">{status}</span>
-    </div>
+  function addRowFromModal() {
+    if (!addRowForm.sku_code.trim()) {
+      setStatus('SKU is required to add a row.');
+      return;
+    }
 
-    {saveSummary ? <div className="note" style={{ marginTop: 8 }}>{saveSummary}</div> : null}
+    const availability: Record<string, boolean> = {};
+    addRowForm.countries.forEach((country) => { availability[country] = true; });
 
-    {showColumnsMenu ? <div className="card" style={{ marginTop: 10, marginBottom: 12 }}>
-      <div style={{ fontWeight: 700, marginBottom: 8 }}>Visible columns</div>
-      <div className="toolbar" style={{ alignItems: 'flex-start' }}>
-        <div>
-          <div className="subtle">Product fields</div>
-          {productColumns.map((column) => <label key={column.key} style={{ display: 'block' }}>
-            <input type="checkbox" checked={visibleProductColumns.has(column.key)} onChange={(e) => setVisibleProductColumns((current) => {
-              const next = new Set(current);
-              if (e.target.checked) next.add(column.key); else next.delete(column.key);
-              return next;
-            })} /> {column.label}
-          </label>)}
-        </div>
-        <div>
-          <div className="subtle">Country availability</div>
-          {countries.map((country) => <label key={country.id} style={{ display: 'block' }}>
-            <input type="checkbox" checked={visibleCountryIds.has(country.id)} onChange={(e) => setVisibleCountryIds((current) => {
-              const next = new Set(current);
-              if (e.target.checked) next.add(country.id); else next.delete(country.id);
-              return next;
-            })} /> {country.country}
-          </label>)}
-        </div>
-      </div>
-    </div> : null}
+    const newRow: MatrixClientRow = {
+      id: 0,
+      sku_code: addRowForm.sku_code.trim(),
+      handlebar: addRowForm.handlebar,
+      speed: addRowForm.speed,
+      rack: addRowForm.rack,
+      bike_type: addRowForm.bike_type,
+      colour: addRowForm.colour,
+      light: addRowForm.light,
+      seatpost_length: addRowForm.seatpost_length,
+      saddle: addRowForm.saddle,
+      description: '',
+      bc_status: '',
+      availability,
+      _clientKey: `new-${crypto.randomUUID()}`
+    };
 
-    <div className="card" style={{ marginBottom: 12 }}>
-      <div style={{ fontWeight: 700, marginBottom: 8 }}>BigCommerce variant SKU check</div>
-      <div className="subtle" style={{ marginBottom: 8 }}>
-        Checks whether the SKU exists in BigCommerce as a variant SKU. Applies to current filtered rows.
-      </div>
-      <div className="subtle" style={{ marginBottom: 8 }}>
-        Rows in scope: {filteredRows.length} ({activeFilterCount ? 'filtered rows' : 'current working set'})
-      </div>
-      <div className="toolbar">
-        <button className="primary" disabled={isCheckingBc || !filteredRows.length} onClick={checkBcStatus}>Check BC status</button>
-      </div>
-      {bcSummary ? <div className="note" style={{ marginTop: 8 }}>{bcSummary}</div> : null}
-    </div>
+    setRows((current) => [newRow, ...current]);
+    setDirtyKeys((current) => ({ ...current, [newRow._clientKey]: true }));
+    setIsAddModalOpen(false);
+    setAddRowForm(emptyAddForm);
+  }
 
-    {canBulkUpdate ? <div className="card" style={{ marginBottom: 12 }}>
-      <div style={{ fontWeight: 700, marginBottom: 8 }}>Bulk update matrix availability</div>
-      <div className="subtle" style={{ marginBottom: 8 }}>Impacted rows: {impactedRows} ({activeFilterCount ? 'filtered scope' : 'current working set'})</div>
-      <div className="toolbar">
-        <select value={bulkForm.country_id} onChange={(e) => setBulkForm((v) => ({ ...v, country_id: Number(e.target.value) }))}>
-          <option value={0}>Select country</option>
-          {countries.map((c) => <option key={c.id} value={c.id}>{c.country} ({c.region})</option>)}
-        </select>
-        <select value={bulkForm.available ? 'yes' : 'no'} onChange={(e) => setBulkForm((v) => ({ ...v, available: e.target.value === 'yes' }))}>
-          <option value="yes">Available</option>
-          <option value="no">Unavailable</option>
-        </select>
-        <button className="primary" onClick={() => {
-          if (!impactedRows) return;
-          if (confirm(`Apply bulk update to ${impactedRows} row(s)?`)) bulkUpdate();
-        }}>Run bulk update</button>
-      </div>
-    </div> : null}
+  function toggleSelectAllFiltered(checked: boolean) {
+    setSelectedKeys((current) => {
+      const next = new Set(current);
+      filteredRows.forEach((row) => {
+        if (checked) next.add(row._clientKey);
+        else next.delete(row._clientKey);
+      });
+      return next;
+    });
+  }
 
-    <div className="tableWrap"><table>
-      <thead><tr>
-        <th>Save</th>
-        {productColumns.filter((column) => visibleProductColumns.has(column.key)).map((column) => <th key={column.key}>{column.label}</th>)}
-        {visibleCountries.map((c) => <th key={c.id}>{c.country}<div className="subtle">{c.region}</div></th>)}
-      </tr>
-      <tr>
-        <th />
-        {productColumns.filter((column) => visibleProductColumns.has(column.key)).map((column) => {
-          const distinct = getDistinct(rows, column.key);
-          const filter = filters[column.key] || { mode: 'contains', value: '' };
-          const canDistinct = distinct.length > 0 && distinct.length <= 25;
-          return <th key={`filter-${column.key}`}>
-            <select value={filter.mode} onChange={(e) => setFilter(column.key, { mode: e.target.value as FilterMode })}>
-              <option value="contains">Contains</option>
-              <option value="equals">Exact</option>
-              <option value="blank">Blank</option>
-              <option value="not_blank">Non-blank</option>
-            </select>
-            {filter.mode === 'contains' || filter.mode === 'equals' ? (
-              canDistinct && filter.mode === 'equals'
-                ? <select value={filter.value} onChange={(e) => setFilter(column.key, { value: e.target.value })}><option value="">All</option>{distinct.map((v) => <option key={v} value={v}>{v}</option>)}</select>
-                : <input placeholder="Filter" value={filter.value} onChange={(e) => setFilter(column.key, { value: e.target.value })} />
-            ) : null}
-          </th>;
-        })}
-        {visibleCountries.map((country) => {
-          const key = `country:${country.country}`;
-          const filter = filters[key] || { mode: 'equals', value: '' };
-          return <th key={`filter-country-${country.id}`}>
-            <select value={filter.value} onChange={(e) => setFilter(key, { mode: 'equals', value: e.target.value })}>
-              <option value="">All</option>
-              <option value="yes">Available</option>
-              <option value="no">Unavailable</option>
-            </select>
-          </th>;
-        })}
-      </tr>
-      </thead>
-      <tbody>
-        {filteredRows.map((row) => <tr key={row._clientKey}>
-          <td><button className="primary" disabled={!canSingleUpdate} onClick={() => saveRow(row)}>Save</button></td>
-          {productColumns.filter((column) => visibleProductColumns.has(column.key)).map((column) => (
-            <td key={`${row._clientKey}-${column.key}`}>
-              {column.key === 'bc_status'
-                ? <input value={String(row.bc_status || '')} readOnly title="Updated by Check BC status action" />
-                : <input
-                  value={String(row[column.key] || '')}
-                  disabled={!canSingleUpdate}
-                  onChange={(e) => updateRow(row._clientKey, (r) => ({ ...r, [column.key]: e.target.value }))}
-                />}
-            </td>
+  return (
+    <div className="page">
+      <h2>Matrix</h2>
+      <div className="note">Bulk actions apply to selected rows. If no rows are selected, they apply to all filtered rows.</div>
+
+      <div className="matrixLayout">
+        <aside className="matrixFilters">
+          <div className="filtersHeader">
+            <strong>Filters</strong>
+            <button onClick={() => setFilters(emptyFilters)}>Reset filters</button>
+          </div>
+
+          <label className="filterLabel">SKU search</label>
+          <input value={filters.sku} onChange={(e) => setFilters((all) => ({ ...all, sku: e.target.value }))} placeholder="Search SKU" />
+
+          {([
+            ['handlebar', 'Handlebar', distinctOptions.handlebar],
+            ['speed', 'Speed', distinctOptions.speed],
+            ['rack', 'Rack', distinctOptions.rack],
+            ['bike_type', 'Bike Type', distinctOptions.bike_type],
+            ['country', 'Country', countries.map((c) => c.country)]
+          ] as const).map(([key, label, items]) => (
+            <div key={key} className="filterGroup">
+              <div className="filterLabel">{label}</div>
+              <div className="choiceList">
+                {items.map((item) => (
+                  <label key={item} className="choiceRow">
+                    <input
+                      type="checkbox"
+                      checked={(filters[key] as string[]).includes(item)}
+                      onChange={() => toggleMultiFilter(key, item)}
+                    />
+                    {item}
+                  </label>
+                ))}
+                {!items.length ? <div className="subtle">No options</div> : null}
+              </div>
+            </div>
           ))}
-          {visibleCountries.map((c) => {
-            const checked = !!row.availability?.[c.country];
-            return <td key={`${row._clientKey}-${c.id}`} className={checked ? 'yes' : 'no'}>
-              <input type="checkbox" disabled={!canSingleUpdate} checked={checked} onChange={(e) => updateRow(row._clientKey, (r) => ({ ...r, availability: { ...(r.availability || {}), [c.country]: e.target.checked } }))} />
-            </td>;
-          })}
-        </tr>)}
-      </tbody>
-    </table></div>
-  </div>;
+
+          <div className="filterGroup">
+            <div className="filterLabel">BC Status</div>
+            <div className="choiceList">
+              {(['ok', 'nok'] as const).map((value) => (
+                <label key={value} className="choiceRow">
+                  <input
+                    type="checkbox"
+                    checked={filters.bc_status.includes(value)}
+                    onChange={() => toggleMultiFilter('bc_status', value)}
+                  />
+                  {value.toUpperCase()}
+                </label>
+              ))}
+            </div>
+          </div>
+        </aside>
+
+        <section>
+          <div className="toolbar" style={{ justifyContent: 'space-between' }}>
+            <div className="toolbar">
+              <button className="primary" disabled={!canSingleUpdate} onClick={() => setIsAddModalOpen(true)}>+ Add Row</button>
+              <button className="primary" disabled={!canSingleUpdate || isSaving} onClick={saveAllDirtyRows}>Save changes</button>
+            </div>
+            <span className="subtle">{status}</span>
+          </div>
+
+          <div className="card" style={{ marginBottom: 12 }}>
+            <div className="toolbar">
+              <strong>Bulk actions</strong>
+              <span className="subtle">In scope: {targetRows.length} row(s) ({selectedCount ? 'selected' : 'filtered'})</span>
+            </div>
+            <div className="toolbar">
+              <select value={bulkCountryId} onChange={(e) => setBulkCountryId(Number(e.target.value))}>
+                <option value={0}>Select country</option>
+                {countries.map((country) => <option key={country.id} value={country.id}>{country.country} ({country.region})</option>)}
+              </select>
+              <button disabled={!canBulkUpdate || !bulkCountryId || !targetRows.length} onClick={() => runBulkCountryUpdate(true)}>Assign country</button>
+              <button disabled={!canBulkUpdate || !bulkCountryId || !targetRows.length} onClick={() => runBulkCountryUpdate(false)}>Remove country</button>
+              <button className="primary" disabled={isCheckingBc || !targetRows.length} onClick={checkBcStatus}>{isCheckingBc ? 'Checking BC…' : 'Check BC status'}</button>
+              <button className="primary" disabled={!canSingleUpdate || isSaving} onClick={saveAllDirtyRows}>Save changes</button>
+            </div>
+            {bcSummary ? <div className="note" style={{ marginBottom: 0 }}>{bcSummary}</div> : null}
+            {saveSummary ? <div className="note" style={{ marginBottom: 0 }}>{saveSummary}</div> : null}
+          </div>
+
+          {isFiltering ? <div className="subtle" style={{ marginBottom: 8 }}>Applying filters…</div> : null}
+
+          <div className="tableWrap">
+            <table className="matrixTableSlim">
+              <thead>
+                <tr>
+                  <th>
+                    <input
+                      type="checkbox"
+                      checked={!!filteredRows.length && filteredRows.every((row) => selectedKeys.has(row._clientKey))}
+                      onChange={(e) => toggleSelectAllFiltered(e.target.checked)}
+                    />
+                  </th>
+                  <th>SKU</th>
+                  <th>Description</th>
+                  <th>BC Status</th>
+                  <th>Countries</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRows.map((row) => {
+                  const bcStatus = normalizeBcStatus(row.bc_status);
+                  return (
+                    <tr key={row._clientKey}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={selectedKeys.has(row._clientKey)}
+                          onChange={(e) => setSelectedKeys((all) => {
+                            const next = new Set(all);
+                            if (e.target.checked) next.add(row._clientKey);
+                            else next.delete(row._clientKey);
+                            return next;
+                          })}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          value={String(row.sku_code || '')}
+                          disabled={!canSingleUpdate}
+                          onChange={(e) => updateRow(row._clientKey, (current) => ({ ...current, sku_code: e.target.value }))}
+                        />
+                      </td>
+                      <td>{deriveDescription(row) || <span className="subtle">No options set</span>}</td>
+                      <td>
+                        <span className={`statusPill ${bcStatus === 'ok' ? 'ok' : 'nok'}`}>
+                          <span className="statusDot" />
+                          {bcStatus ? bcStatus.toUpperCase() : 'NOK'}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="countryBadges">
+                          {countries.map((country) => {
+                            const available = !!row.availability?.[country.country];
+                            return (
+                              <button
+                                key={`${row._clientKey}-${country.id}`}
+                                className={`countryBadge ${available ? 'countryOn' : 'countryOff'}`}
+                                disabled={!canSingleUpdate}
+                                onClick={() => toggleCountryInline(row, country.country)}
+                                title={`${country.country} (${country.region})`}
+                              >
+                                {country.country}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      {isAddModalOpen ? (
+        <div className="modalBackdrop" onClick={() => setIsAddModalOpen(false)}>
+          <div className="modalCard" onClick={(e) => e.stopPropagation()}>
+            <h3>Add Matrix Row</h3>
+            <div className="modalGrid">
+              <label>SKU<input value={addRowForm.sku_code} onChange={(e) => setAddRowForm((all) => ({ ...all, sku_code: e.target.value }))} /></label>
+              <label>Handlebar<input value={addRowForm.handlebar} onChange={(e) => setAddRowForm((all) => ({ ...all, handlebar: e.target.value }))} /></label>
+              <label>Speed<input value={addRowForm.speed} onChange={(e) => setAddRowForm((all) => ({ ...all, speed: e.target.value }))} /></label>
+              <label>Rack<input value={addRowForm.rack} onChange={(e) => setAddRowForm((all) => ({ ...all, rack: e.target.value }))} /></label>
+              <label>Bike Type<input value={addRowForm.bike_type} onChange={(e) => setAddRowForm((all) => ({ ...all, bike_type: e.target.value }))} /></label>
+              <label>Colour<input value={addRowForm.colour} onChange={(e) => setAddRowForm((all) => ({ ...all, colour: e.target.value }))} /></label>
+              <label>Light<input value={addRowForm.light} onChange={(e) => setAddRowForm((all) => ({ ...all, light: e.target.value }))} /></label>
+              <label>Seatpost<input value={addRowForm.seatpost_length} onChange={(e) => setAddRowForm((all) => ({ ...all, seatpost_length: e.target.value }))} /></label>
+              <label>Saddle<input value={addRowForm.saddle} onChange={(e) => setAddRowForm((all) => ({ ...all, saddle: e.target.value }))} /></label>
+            </div>
+            <div className="filterGroup">
+              <div className="filterLabel">Countries</div>
+              <div className="choiceList">
+                {countries.map((country) => (
+                  <label className="choiceRow" key={country.id}>
+                    <input
+                      type="checkbox"
+                      checked={addRowForm.countries.includes(country.country)}
+                      onChange={() => setAddRowForm((current) => {
+                        const exists = current.countries.includes(country.country);
+                        return {
+                          ...current,
+                          countries: exists ? current.countries.filter((entry) => entry !== country.country) : [...current.countries, country.country]
+                        };
+                      })}
+                    />
+                    {country.country}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="toolbar" style={{ justifyContent: 'flex-end' }}>
+              <button onClick={() => setIsAddModalOpen(false)}>Cancel</button>
+              <button className="primary" onClick={addRowFromModal}>Add row</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
 }
