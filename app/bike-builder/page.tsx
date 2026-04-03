@@ -40,7 +40,13 @@ export default function BikeBuilderPage() {
   const [selected, setSelected] = useState<Record<string, string[]>>({});
   const [generated, setGenerated] = useState<GeneratedRow[]>([]);
   const [picked, setPicked] = useState<Record<string, boolean>>({});
-  useEffect(() => { fetch('/api/sku-rules').then(r => r.json()).then(setRules); }, []);
+  const [permissions, setPermissions] = useState<string[]>([]);
+  useEffect(() => {
+    Promise.all([fetch('/api/sku-rules').then(r => r.json()), fetch('/api/me').then(r => r.json())]).then(([rulesData, me]) => {
+      setRules(rulesData);
+      setPermissions(me.permissions || []);
+    });
+  }, []);
 
   const grouped = useMemo(() => {
     const map: Record<string, SkuRule[]> = {};
@@ -83,6 +89,7 @@ export default function BikeBuilderPage() {
     alert(`${rows.length} row(s) pushed to matrix`);
   }
 
+  const canPush = permissions.includes('builder.push');
   const selectedGroups = Object.values(selected).filter(v => v?.length).length;
   const selectedValues = Object.values(selected).reduce((sum, v) => sum + (v?.length || 0), 0);
   const ticked = Object.values(picked).filter(Boolean).length;
@@ -118,7 +125,7 @@ export default function BikeBuilderPage() {
       <button className="primary" onClick={generate}>Generate all potential SKU code</button>
       <button onClick={() => setPicked(Object.fromEntries(generated.map(r => [r.key, true])))}>Select all</button>
       <button onClick={() => setPicked({})}>Clear selection</button>
-      <button className="primary" onClick={pushSelected}>Push to Matrix !</button>
+      <button className="primary" disabled={!canPush} onClick={pushSelected}>Push to Matrix !</button>
     </div>
     <div className="tableWrap"><table>
       <thead><tr><th>Pick</th><th>SKU</th><th>Bike type</th><th>Handlebar</th><th>Speed</th><th>Rack</th><th>Colour</th><th>Light</th><th>Seatpost</th><th>Saddle</th><th>Description</th></tr></thead>

@@ -1,11 +1,16 @@
 import { NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
+import { requireApiLogin, requireApiRole } from '@/lib/api-auth';
+import { writeAuditLog } from '@/lib/audit';
 
 async function getCountries() {
   return await sql`select id, country, region from countries order by region, country`;
 }
 
 export async function GET() {
+  const auth = await requireApiLogin();
+  if (auth instanceof NextResponse) return auth;
+
   const countries = await getCountries();
   const products = await sql`
     select id, sku_code, handlebar, speed, rack, bike_type, colour, light, seatpost_length, saddle, description
@@ -29,6 +34,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireApiRole('matrix.update.single');
+  if (auth instanceof NextResponse) return auth;
+
   const body = await request.json();
   const product = body.product || {};
   const availability = body.availability || {};
@@ -36,6 +44,7 @@ export async function POST(request: Request) {
   const skuCode = String(product.sku_code || '').trim();
   if (!skuCode) return NextResponse.json({ error: 'sku_code is required' }, { status: 400 });
 
+  const oldProduct = id ? (await sql`select * from products where id = ${id}` as any[])[0] : null;
   let productId = id;
   if (productId) {
     const updated = await sql`
@@ -53,14 +62,14 @@ export async function POST(request: Request) {
         updated_at = now()
       where id = ${productId}
       returning id
-    `;
+    ` as any[];
     productId = Number(updated[0].id);
   } else {
     const inserted = await sql`
       insert into products (sku_code, handlebar, speed, rack, bike_type, colour, light, seatpost_length, saddle, description)
       values (${skuCode}, ${String(product.handlebar || '')}, ${String(product.speed || '')}, ${String(product.rack || '')}, ${String(product.bike_type || '')}, ${String(product.colour || '')}, ${String(product.light || '')}, ${String(product.seatpost_length || '')}, ${String(product.saddle || '')}, ${String(product.description || '')})
       returning id
-    `;
+    ` as any[];
     productId = Number(inserted[0].id);
   }
 
@@ -74,6 +83,16 @@ export async function POST(request: Request) {
       do update set available = excluded.available, updated_at = now()
     `;
   }
+
+  const newProduct = (await sql`select * from products where id = ${productId}` as any[])[0];
+  await writeAuditLog({
+    userId: auth.user.id,
+    actionKey: 'matrix.update.single',
+    entityType: 'product',
+    entityId: String(productId),
+    oldData: oldProduct,
+    newData: { product: newProduct, availability }
+  });
 
   return NextResponse.json({ ok: true, id: productId });
 }

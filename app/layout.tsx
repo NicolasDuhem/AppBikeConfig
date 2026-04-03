@@ -1,5 +1,6 @@
 import './globals.css';
 import Link from 'next/link';
+import LogoutButton from '@/components/logout-button';
 
 const links = [
   ['/', 'Home'],
@@ -7,7 +8,8 @@ const links = [
   ['/order', 'Order'],
   ['/setup', 'Setup'],
   ['/sku-definition', 'Bike SKU Definition'],
-  ['/bike-builder', 'Bike Builder']
+  ['/bike-builder', 'Bike Builder'],
+  ['/users', 'Users']
 ];
 
 export const metadata = {
@@ -25,7 +27,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <div className="brandtitle">Brompton</div>
               <div>AppBikeConfig · Next.js + Neon starter</div>
             </div>
-            <div>Brand colour #002FA7</div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div>Brand colour #002FA7</div>
+              <LogoutButton />
+            </div>
           </div>
           <div className="tabs">
             {links.map(([href, label]) => (

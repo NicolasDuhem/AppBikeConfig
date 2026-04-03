@@ -803,3 +803,87 @@ This tool is now best thought of as:
 - a future service for the B2B storefront
 
 The next architectural milestone is **authentication + role-based access control**, and the recommended implementation is **Auth.js + Postgres users/roles + server-side permission checks**.
+
+---
+
+## Implemented Auth/RBAC (App Router + Auth.js Credentials)
+
+### Phase 1 — SQL auth tables + role seeding
+Added migration file:
+- `sql/002_auth_rbac.sql`
+
+It creates and seeds:
+- `app_users`
+- `roles`
+- `user_roles`
+- `audit_log`
+- role seeds: `sys_admin`, `sales_admin`, `sales_standard`, `product_admin`, `read_only`
+
+### Phase 2 — Auth.js credentials login + login page + logout
+Implemented:
+- `next-auth` credentials provider (email + password)
+- bcrypt password verification against `app_users.password_hash`
+- custom `/login` page
+- logout button in layout
+- Auth.js route handler under `app/api/auth/[...nextauth]/route.ts`
+
+### Phase 3 — Session helpers + route/page protection
+Implemented reusable helpers in `lib/auth.ts`:
+- `getCurrentSession`
+- `getCurrentUser`
+- `getCurrentUserRoles`
+- `requireLogin`
+- `requireRole`
+
+Added:
+- `middleware.ts` to require authentication for all non-public pages
+- `lib/rbac.ts` with role->permission mapping and `can(actionKey)` equivalent
+- `app/api/me` to expose current user + roles + permissions to UI (no secrets)
+
+### Phase 4 — sys_admin user management
+Implemented:
+- `/users` page for sys_admin
+- `/api/users` (GET/POST/PATCH)
+- `/api/roles` (GET)
+
+Supports:
+- create user with email + initial password (bcrypt hash)
+- assign one or multiple roles
+- deactivate/reactivate users
+
+### Phase 5 — API authorization checks
+Server-side checks are applied in route handlers:
+- `POST /api/countries` -> `sys_admin`, `sales_admin`
+- `POST /api/matrix` -> `sys_admin`, `sales_admin`, `sales_standard`
+- `POST /api/matrix/bulk-update` -> `sys_admin`, `sales_admin`
+- `POST/DELETE /api/setup-options` -> `sys_admin`, `product_admin`
+- `POST /api/sku-rules` -> `sys_admin`, `product_admin`
+- `POST /api/builder-push` -> `sys_admin`, `product_admin`
+- `/api/users*` -> `sys_admin`
+
+### Phase 6 — Bulk update matrix route + UI restriction
+Implemented:
+- `POST /api/matrix/bulk-update`
+- Matrix UI action for bulk availability update by country and optional bike type
+- UI disable/hide behavior based on computed permissions from `/api/me`
+
+### Phase 7 — Audit logging
+Implemented in `audit_log` for:
+- matrix single updates
+- matrix bulk updates
+- add country
+- setup option changes
+- SKU rule changes
+- builder push
+- user creation
+- role assignment
+- user deactivation/reactivation
+
+Audit helper:
+- `lib/audit.ts`
+
+### Security notes
+- `DATABASE_URL` remains server-side only via `lib/db.ts`
+- Auth.js secret uses `AUTH_SECRET`
+- No secret is exposed with `NEXT_PUBLIC_`
+- Authorization is enforced server-side in API handlers (UI restrictions are convenience only)

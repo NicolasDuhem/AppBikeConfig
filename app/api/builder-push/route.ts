@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
+import { requireApiRole } from '@/lib/api-auth';
+import { writeAuditLog } from '@/lib/audit';
 
 export async function POST(request: Request) {
+  const auth = await requireApiRole('builder.push');
+  if (auth instanceof NextResponse) return auth;
+
   const body = await request.json();
   const rows = Array.isArray(body.rows) ? body.rows : [];
   let pushed = 0;
@@ -25,14 +30,21 @@ export async function POST(request: Request) {
           description = excluded.description,
           updated_at = now()
       returning id
-    `;
+    ` as any[];
     pushed += 1;
     const productId = Number(inserted[0].id);
-    const countries = await sql`select id from countries`;
-    for (const c of countries as any[]) {
+    const countries = await sql`select id from countries` as any[];
+    for (const c of countries) {
       await sql`insert into availability (product_id, country_id, available) values (${productId}, ${c.id}, false) on conflict (product_id, country_id) do nothing`;
     }
   }
+
+  await writeAuditLog({
+    userId: auth.user.id,
+    actionKey: 'builder.push',
+    entityType: 'builder_push',
+    newData: { pushed, rowCount: rows.length }
+  });
 
   return NextResponse.json({ ok: true, pushed });
 }
