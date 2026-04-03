@@ -42,3 +42,29 @@ th { position:sticky; top:0; background:#f8faff; z-index:1; }
 .metricLabel { font-size:11px; color:var(--muted); font-weight:800; text-transform:uppercase; }
 .metricValue { font-size:24px; color:var(--accent); font-weight:800; }
 @media (max-width: 960px) { .grid2, .metricGrid { grid-template-columns: 1fr; } }
+
+.matrixLayout { display:grid; grid-template-columns: 280px 1fr; gap:14px; align-items:start; }
+.matrixFilters { position:sticky; top:10px; background:#f8faff; border:1px solid var(--line); border-radius:14px; padding:12px; max-height:80vh; overflow:auto; }
+.filtersHeader { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.filterGroup { margin-top:10px; }
+.filterLabel { display:block; font-weight:700; font-size:12px; margin-bottom:6px; color:var(--muted); text-transform:uppercase; }
+.choiceList { border:1px solid var(--line); background:#fff; border-radius:10px; padding:6px; max-height:145px; overflow:auto; }
+.choiceRow { display:flex; gap:6px; align-items:center; font-size:13px; padding:2px 0; }
+.matrixTableSlim { width:100%; min-width:920px; }
+.statusPill { display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:800; border-radius:999px; padding:4px 8px; }
+.statusPill.ok { background:#dff7e6; color:#126e2b; }
+.statusPill.nok { background:#fde2e2; color:#9d1d1d; }
+.statusDot { width:8px; height:8px; border-radius:50%; background:currentColor; }
+.countryBadges { display:flex; gap:6px; flex-wrap:wrap; }
+.countryBadge { border-radius:999px; padding:4px 8px; font-size:11px; font-weight:700; border:1px solid transparent; }
+.countryOn { background:#dff7e6; color:#126e2b; border-color:#83d19a; }
+.countryOff { background:#fde2e2; color:#9d1d1d; border-color:#ebb0b0; }
+.modalBackdrop { position:fixed; inset:0; background:rgba(10,20,40,.35); display:grid; place-items:center; z-index:20; }
+.modalCard { width:min(900px, 92vw); max-height:88vh; overflow:auto; background:#fff; border-radius:16px; border:1px solid var(--line); padding:16px; }
+.modalGrid { display:grid; grid-template-columns:repeat(2,minmax(220px,1fr)); gap:10px; }
+.modalGrid label { display:grid; gap:6px; font-size:13px; font-weight:700; color:var(--muted); }
+@media (max-width: 960px) {
+  .matrixLayout { grid-template-columns: 1fr; }
+  .matrixFilters { position:static; max-height:none; }
+  .modalGrid { grid-template-columns:1fr; }
+}

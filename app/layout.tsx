@@ -5,8 +5,6 @@ import LogoutButton from '@/components/logout-button';
 const links = [
   ['/', 'Home'],
   ['/matrix', 'Matrix'],
-  ['/order', 'Order'],
-  ['/setup', 'Setup'],
   ['/sku-definition', 'Bike SKU Definition'],
   ['/bike-builder', 'Bike Builder'],
   ['/users', 'Users']
