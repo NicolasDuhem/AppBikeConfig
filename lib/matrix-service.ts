@@ -12,6 +12,7 @@ export type MatrixProductInput = {
   seatpost_length?: string;
   saddle?: string;
   description?: string;
+  bc_status?: 'ok' | 'nok' | '';
 };
 
 export async function getCountries() {
@@ -42,6 +43,7 @@ export async function upsertMatrixProduct(product: MatrixProductInput, availabil
           seatpost_length = ${String(product.seatpost_length || '')},
           saddle = ${String(product.saddle || '')},
           description = ${String(product.description || '')},
+          bc_status = ${String(product.bc_status || '')},
           updated_at = now()
         where id = ${productId}
         returning id
@@ -52,8 +54,8 @@ export async function upsertMatrixProduct(product: MatrixProductInput, availabil
       productId = Number(updated[0].id);
     } else {
       const inserted = await sql`
-        insert into products (sku_code, handlebar, speed, rack, bike_type, colour, light, seatpost_length, saddle, description)
-        values (${skuCode}, ${String(product.handlebar || '')}, ${String(product.speed || '')}, ${String(product.rack || '')}, ${String(product.bike_type || '')}, ${String(product.colour || '')}, ${String(product.light || '')}, ${String(product.seatpost_length || '')}, ${String(product.saddle || '')}, ${String(product.description || '')})
+        insert into products (sku_code, handlebar, speed, rack, bike_type, colour, light, seatpost_length, saddle, description, bc_status)
+        values (${skuCode}, ${String(product.handlebar || '')}, ${String(product.speed || '')}, ${String(product.rack || '')}, ${String(product.bike_type || '')}, ${String(product.colour || '')}, ${String(product.light || '')}, ${String(product.seatpost_length || '')}, ${String(product.saddle || '')}, ${String(product.description || '')}, ${String(product.bc_status || '')})
         returning id
       ` as any[];
       productId = Number(inserted[0].id);
@@ -78,4 +80,16 @@ export async function upsertMatrixProduct(product: MatrixProductInput, availabil
 
   const newProduct = (await sql`select * from products where id = ${productId}` as any[])[0];
   return { ok: true as const, productId, oldProduct, newProduct };
+}
+
+
+export async function updateMatrixBcStatus(updates: Array<{ productId: number; bcStatus: 'ok' | 'nok' }>) {
+  for (const update of updates) {
+    await sql`
+      update products
+      set bc_status = ${update.bcStatus},
+          updated_at = now()
+      where id = ${update.productId}
+    `;
+  }
 }

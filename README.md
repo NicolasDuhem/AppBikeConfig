@@ -18,6 +18,8 @@ Run in this order:
 1. `sql/schema.sql`
 2. `sql/seed.sql` (optional baseline business data)
 3. `sql/002_auth_rbac.sql` (required for auth + RBAC + audit)
+4. `sql/003_sku_rule_activation_and_constraints.sql`
+5. `sql/004_products_bc_status.sql` (adds/polices persisted `bc_status`)
 
 ## Environment variables
 
@@ -25,12 +27,16 @@ Required:
 
 - `DATABASE_URL` (server-side only)
 - `AUTH_SECRET` (Auth.js signing secret)
+- `BIGCOMMERCE_STORE_HASH` (server-side only)
+- `BIGCOMMERCE_ACCESS_TOKEN` (server-side only)
 
 Example `.env.local`:
 
 ```bash
 DATABASE_URL="postgres://..."
 AUTH_SECRET="replace-with-long-random-secret"
+BIGCOMMERCE_STORE_HASH="store-hash"
+BIGCOMMERCE_ACCESS_TOKEN="bigcommerce-api-token"
 ```
 
 > Do not expose these values in client code. Do not use `NEXT_PUBLIC_` for secrets.
@@ -118,6 +124,8 @@ Writes to `audit_log` for:
 3. Add environment variables in Vercel Project Settings:
    - `DATABASE_URL`
    - `AUTH_SECRET`
+   - `BIGCOMMERCE_STORE_HASH`
+   - `BIGCOMMERCE_ACCESS_TOKEN`
 4. Run SQL migrations in Neon (including `sql/002_auth_rbac.sql`).
 5. Deploy.
 6. Validate login and role-protected APIs in production.

@@ -11,6 +11,7 @@ export type MatrixRow = {
   seatpost_length: string;
   saddle: string;
   description: string;
+  bc_status: 'ok' | 'nok' | '';
   availability: Record<string, boolean>;
 };
 
@@ -24,7 +25,8 @@ export type MatrixProductColumn =
   | 'light'
   | 'seatpost_length'
   | 'saddle'
-  | 'description';
+  | 'description'
+  | 'bc_status';
 
 export type SetupOption = { id: number; option_name: string; choice_value: string; sort_order: number };
 export type SkuRule = {

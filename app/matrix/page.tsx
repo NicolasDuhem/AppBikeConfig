@@ -14,11 +14,12 @@ const productColumns: Array<{ key: MatrixProductColumn; label: string }> = [
   { key: 'light', label: 'Light' },
   { key: 'seatpost_length', label: 'Seatpost' },
   { key: 'saddle', label: 'Saddle' },
-  { key: 'description', label: 'Description' }
+  { key: 'description', label: 'Description' },
+  { key: 'bc_status', label: 'BC status' }
 ];
 
 const defaultVisibleProductColumns = new Set<MatrixProductColumn>(productColumns.map((c) => c.key));
-const emptyRow = { sku_code: '', handlebar: '', speed: '', rack: '', bike_type: '', colour: '', light: '', seatpost_length: '', saddle: '', description: '' };
+const emptyRow = { sku_code: '', handlebar: '', speed: '', rack: '', bike_type: '', colour: '', light: '', seatpost_length: '', saddle: '', description: '', bc_status: '' as const };
 
 type FilterMode = 'contains' | 'equals' | 'blank' | 'not_blank';
 type ColumnFilter = { mode: FilterMode; value: string };
@@ -42,6 +43,8 @@ export default function MatrixPage() {
   const [filters, setFilters] = useState<Record<string, ColumnFilter>>({});
   const [dirtyKeys, setDirtyKeys] = useState<Record<string, boolean>>({});
   const [saveSummary, setSaveSummary] = useState<string>('');
+  const [bcSummary, setBcSummary] = useState<string>('');
+  const [isCheckingBc, setIsCheckingBc] = useState(false);
 
   async function load() {
     const [res, meRes] = await Promise.all([fetch('/api/matrix'), fetch('/api/me')]);
@@ -156,6 +159,7 @@ export default function MatrixPage() {
 
   const visibleCountries = countries.filter((c) => visibleCountryIds.has(c.id));
   const impactedRows = filteredRows.filter((r) => r.id > 0).length;
+  const activeFilterCount = Object.values(filters).filter((f) => (f.mode === 'blank' || f.mode === 'not_blank' || f.value.trim())).length;
 
   async function bulkUpdate() {
     if (!canBulkUpdate || !bulkForm.country_id) return;
@@ -168,6 +172,47 @@ export default function MatrixPage() {
     const data = await res.json();
     setStatus(res.ok ? `Bulk update done (${data.updated} rows)` : data.error || 'Bulk update failed');
     await load();
+  }
+
+  async function checkBcStatus() {
+    const targetRows = filteredRows;
+    if (!targetRows.length) {
+      setBcSummary('No rows in scope to check.');
+      return;
+    }
+
+    setIsCheckingBc(true);
+    setBcSummary('Checking BigCommerce variant SKUs...');
+
+    const res = await fetch('/api/matrix/check-bc-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        scope: activeFilterCount ? 'filtered_rows' : 'working_set',
+        rows: targetRows.map((row) => ({ id: row.id, sku_code: row.sku_code }))
+      })
+    });
+
+    const data = await res.json().catch(() => ({}));
+    const apiResults = Array.isArray(data.results) ? data.results : [];
+    const resultBySku = new Map<string, any>(apiResults.map((result: any) => [String(result.inputSku || ''), result]));
+
+    setRows((allRows) => allRows.map((row) => {
+      const result = resultBySku.get(String(row.sku_code || '').trim());
+      if (!result || result.error) return row;
+      return { ...row, bc_status: result.bcStatus };
+    }));
+
+    if (data.summary) {
+      setBcSummary(
+        `BigCommerce check complete: ${data.summary.checked} checked, ${data.summary.found} found, ${data.summary.notFound} not found, ${data.summary.failed} failed.` +
+        (data.globalErrorMessage ? ` Error: ${data.globalErrorMessage}` : '')
+      );
+    } else {
+      setBcSummary(data.error || 'BigCommerce check finished with no summary.');
+    }
+
+    setIsCheckingBc(false);
   }
 
   function setFilter(column: string, patch: Partial<ColumnFilter>) {
@@ -216,9 +261,23 @@ export default function MatrixPage() {
       </div>
     </div> : null}
 
+    <div className="card" style={{ marginBottom: 12 }}>
+      <div style={{ fontWeight: 700, marginBottom: 8 }}>BigCommerce variant SKU check</div>
+      <div className="subtle" style={{ marginBottom: 8 }}>
+        Checks whether the SKU exists in BigCommerce as a variant SKU. Applies to current filtered rows.
+      </div>
+      <div className="subtle" style={{ marginBottom: 8 }}>
+        Rows in scope: {filteredRows.length} ({activeFilterCount ? 'filtered rows' : 'current working set'})
+      </div>
+      <div className="toolbar">
+        <button className="primary" disabled={isCheckingBc || !filteredRows.length} onClick={checkBcStatus}>Check BC status</button>
+      </div>
+      {bcSummary ? <div className="note" style={{ marginTop: 8 }}>{bcSummary}</div> : null}
+    </div>
+
     {canBulkUpdate ? <div className="card" style={{ marginBottom: 12 }}>
       <div style={{ fontWeight: 700, marginBottom: 8 }}>Bulk update matrix availability</div>
-      <div className="subtle" style={{ marginBottom: 8 }}>Impacted rows: {impactedRows} ({Object.keys(filters).length ? 'filtered scope' : 'current working set'})</div>
+      <div className="subtle" style={{ marginBottom: 8 }}>Impacted rows: {impactedRows} ({activeFilterCount ? 'filtered scope' : 'current working set'})</div>
       <div className="toolbar">
         <select value={bulkForm.country_id} onChange={(e) => setBulkForm((v) => ({ ...v, country_id: Number(e.target.value) }))}>
           <option value={0}>Select country</option>
@@ -279,11 +338,13 @@ export default function MatrixPage() {
           <td><button className="primary" disabled={!canSingleUpdate} onClick={() => saveRow(row)}>Save</button></td>
           {productColumns.filter((column) => visibleProductColumns.has(column.key)).map((column) => (
             <td key={`${row._clientKey}-${column.key}`}>
-              <input
-                value={String(row[column.key] || '')}
-                disabled={!canSingleUpdate}
-                onChange={(e) => updateRow(row._clientKey, (r) => ({ ...r, [column.key]: e.target.value }))}
-              />
+              {column.key === 'bc_status'
+                ? <input value={String(row.bc_status || '')} readOnly title="Updated by Check BC status action" />
+                : <input
+                  value={String(row[column.key] || '')}
+                  disabled={!canSingleUpdate}
+                  onChange={(e) => updateRow(row._clientKey, (r) => ({ ...r, [column.key]: e.target.value }))}
+                />}
             </td>
           ))}
           {visibleCountries.map((c) => {

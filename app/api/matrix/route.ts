@@ -10,7 +10,7 @@ export async function GET() {
 
   const countries = await getCountries();
   const products = await sql`
-    select id, sku_code, handlebar, speed, rack, bike_type, colour, light, seatpost_length, saddle, description
+    select id, sku_code, handlebar, speed, rack, bike_type, colour, light, seatpost_length, saddle, description, coalesce(bc_status, '') as bc_status
     from products
     order by bike_type nulls last, sku_code
   `;

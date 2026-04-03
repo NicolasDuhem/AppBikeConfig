@@ -10,6 +10,7 @@ create table if not exists products (
   seatpost_length text,
   saddle text,
   description text,
+  bc_status text not null default '' check (bc_status in ('', 'ok', 'nok')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
