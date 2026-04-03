@@ -1,14 +1,6 @@
 import './globals.css';
-import Link from 'next/link';
 import LogoutButton from '@/components/logout-button';
-
-const links = [
-  ['/', 'Home'],
-  ['/matrix', 'Matrix'],
-  ['/sku-definition', 'Bike SKU Definition'],
-  ['/bike-builder', 'Bike Builder'],
-  ['/users', 'Users']
-];
+import AppNavigation from '@/components/app-navigation';
 
 export const metadata = {
   title: 'Brompton AppBikeConfig',
@@ -20,21 +12,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body>
         <div className="shell">
-          <div className="brandbar">
+          <header className="brandbar">
             <div>
               <div className="brandtitle">Brompton</div>
-              <div>AppBikeConfig · Next.js + Neon starter</div>
+              <div className="brandSubtitle">AppBikeConfig · Admin Console</div>
             </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div className="brandMeta">
               <div>Brand colour #002FA7</div>
               <LogoutButton />
             </div>
-          </div>
-          <div className="tabs">
-            {links.map(([href, label]) => (
-              <Link className="tab" key={href} href={href}>{label}</Link>
-            ))}
-          </div>
+          </header>
+          <AppNavigation />
           {children}
         </div>
       </body>
