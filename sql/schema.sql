@@ -33,10 +33,20 @@ create table if not exists sku_rules (
   id bigserial primary key,
   digit_position integer not null,
   option_name text not null,
-  code_value text not null,
+  code_value text not null check (code_value ~ '^[A-Z0-9]$'),
   choice_value text not null,
-  description_element text
+  description_element text,
+  is_active boolean not null default true,
+  deactivated_at timestamptz,
+  deactivation_reason text
 );
+
+create unique index if not exists sku_rules_active_digit_code_uniq
+  on sku_rules (digit_position, upper(code_value))
+  where is_active = true;
+
+create index if not exists sku_rules_active_lookup_idx
+  on sku_rules (is_active, option_name, digit_position);
 
 create table if not exists setup_options (
   id bigserial primary key,

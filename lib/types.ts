@@ -13,5 +13,33 @@ export type MatrixRow = {
   description: string;
   availability: Record<string, boolean>;
 };
+
+export type MatrixProductColumn =
+  | 'sku_code'
+  | 'handlebar'
+  | 'speed'
+  | 'rack'
+  | 'bike_type'
+  | 'colour'
+  | 'light'
+  | 'seatpost_length'
+  | 'saddle'
+  | 'description';
+
 export type SetupOption = { id: number; option_name: string; choice_value: string; sort_order: number };
-export type SkuRule = { id: number; digit_position: number; option_name: string; code_value: string; choice_value: string; description_element: string | null };
+export type SkuRule = {
+  id: number;
+  digit_position: number;
+  option_name: string;
+  code_value: string;
+  choice_value: string;
+  description_element: string | null;
+  is_active: boolean;
+  deactivated_at: string | null;
+  deactivation_reason: string | null;
+};
+
+export type SkuDigitIssue = {
+  digit_position: number;
+  option_names: string[];
+};
