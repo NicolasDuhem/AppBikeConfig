@@ -1,4 +1,3 @@
-import type { NextAuthOptions } from 'next-auth';
 import { getServerSession } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
@@ -11,7 +10,7 @@ export type AppUser = {
   is_active: boolean;
 };
 
-export const authOptions: NextAuthOptions = {
+export const authOptions = {
   secret: process.env.AUTH_SECRET,
   session: { strategy: 'jwt' },
   pages: { signIn: '/login' },
