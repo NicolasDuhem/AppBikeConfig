@@ -12,7 +12,7 @@ export type AppUser = {
 
 export const authOptions = {
   secret: process.env.AUTH_SECRET,
-  session: { strategy: 'jwt' },
+  session: { strategy: 'jwt' as const },
   pages: { signIn: '/login' },
   providers: [
     CredentialsProvider({
