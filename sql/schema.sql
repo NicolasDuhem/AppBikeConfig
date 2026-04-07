@@ -34,7 +34,7 @@ create table if not exists sku_rules (
   id bigserial primary key,
   digit_position integer not null,
   option_name text not null,
-  code_value text not null check (code_value ~ '^[A-Z0-9]$'),
+  code_value text not null check (((digit_position = 0 and code_value = '-')) or ((digit_position > 0 and code_value ~ '^[A-Z0-9]$'))),
   choice_value text not null,
   description_element text,
   is_active boolean not null default true,

@@ -8,6 +8,7 @@ function normalizeCodeValue(value: string) {
 }
 
 async function validateDigitOptionConsistency(digitPosition: number, optionName: string, ignoreId?: number) {
+  if (digitPosition === 0) return null;
   const rows = await sql`
     select id, option_name
     from sku_rules
@@ -26,6 +27,7 @@ async function getDigitIssues() {
   const rows = await sql`
     select digit_position, array_agg(distinct option_name order by option_name) as option_names
     from sku_rules
+    where digit_position > 0
     group by digit_position
     having count(distinct lower(option_name)) > 1
     order by digit_position
@@ -41,8 +43,39 @@ export async function GET(request: Request) {
   const includeInactive = searchParams.get('include_inactive') === '1';
 
   const rows = includeInactive
-    ? await sql`select id, digit_position, option_name, code_value, choice_value, description_element, is_active, deactivated_at, deactivation_reason from sku_rules order by digit_position, option_name, choice_value, id`
-    : await sql`select id, digit_position, option_name, code_value, choice_value, description_element, is_active, deactivated_at, deactivation_reason from sku_rules where is_active = true order by digit_position, option_name, choice_value, id`;
+    ? await sql`
+      select r.id, r.digit_position, r.option_name, r.code_value, r.choice_value, r.description_element, r.is_active, r.deactivated_at, r.deactivation_reason,
+             edit_meta.last_edited_by_email, edit_meta.last_edited_at
+      from sku_rules r
+      left join lateral (
+        select u.email as last_edited_by_email, a.created_at as last_edited_at
+        from audit_log a
+        left join app_users u on u.id = a.user_id
+        where a.entity_type = 'sku_rule'
+          and a.entity_id = r.id::text
+          and a.action_key = 'sku.manage.edit'
+        order by a.created_at desc
+        limit 1
+      ) edit_meta on true
+      order by r.digit_position, r.option_name, r.choice_value, r.id
+    `
+    : await sql`
+      select r.id, r.digit_position, r.option_name, r.code_value, r.choice_value, r.description_element, r.is_active, r.deactivated_at, r.deactivation_reason,
+             edit_meta.last_edited_by_email, edit_meta.last_edited_at
+      from sku_rules r
+      left join lateral (
+        select u.email as last_edited_by_email, a.created_at as last_edited_at
+        from audit_log a
+        left join app_users u on u.id = a.user_id
+        where a.entity_type = 'sku_rule'
+          and a.entity_id = r.id::text
+          and a.action_key = 'sku.manage.edit'
+        order by a.created_at desc
+        limit 1
+      ) edit_meta on true
+      where r.is_active = true
+      order by r.digit_position, r.option_name, r.choice_value, r.id
+    `;
 
   const digitIssues = await getDigitIssues();
   return NextResponse.json({ rows, digitIssues });
@@ -59,11 +92,14 @@ export async function POST(request: Request) {
   const choiceValue = String(body.choice_value || '').trim();
   const descriptionElement = String(body.description_element || '').trim() || null;
 
-  if (!digitPosition || !optionName || !codeValue || !choiceValue) {
-    return NextResponse.json({ error: 'digit_position, option_name, code_value and choice_value are required' }, { status: 400 });
+  if (!optionName || !codeValue || !choiceValue) {
+    return NextResponse.json({ error: 'option_name, code_value and choice_value are required' }, { status: 400 });
   }
-  if (!/^[A-Z0-9]$/.test(codeValue)) {
-    return NextResponse.json({ error: 'code_value must be exactly one alphanumeric character (A-Z or 0-9)' }, { status: 400 });
+  if (digitPosition < 0) {
+    return NextResponse.json({ error: 'digit_position must be zero or a positive integer' }, { status: 400 });
+  }
+  if (digitPosition > 0 && !/^[A-Z0-9]$/.test(codeValue)) {
+    return NextResponse.json({ error: 'code_value must be exactly one alphanumeric character (A-Z or 0-9) when digit_position > 0' }, { status: 400 });
   }
 
   const optionNameError = await validateDigitOptionConsistency(digitPosition, optionName);
@@ -73,12 +109,13 @@ export async function POST(request: Request) {
     select id
     from sku_rules
     where digit_position = ${digitPosition}
+      and lower(option_name) = lower(${optionName})
       and upper(code_value) = ${codeValue}
       and is_active = true
     limit 1
   ` as any[];
   if (existingActiveCode.length) {
-    return NextResponse.json({ error: `Active duplicate exists for digit ${digitPosition} and code ${codeValue}` }, { status: 409 });
+    return NextResponse.json({ error: `Active duplicate exists for digit ${digitPosition}, option ${optionName} and code ${codeValue}` }, { status: 409 });
   }
 
   const rows = await sql`
@@ -104,8 +141,6 @@ export async function PATCH(request: Request) {
 
   const body = await request.json();
   const id = Number(body.id || 0);
-  const isActive = !!body.is_active;
-  const reason = String(body.deactivation_reason || '').trim();
 
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
 
@@ -113,6 +148,35 @@ export async function PATCH(request: Request) {
   if (!existing.length) return NextResponse.json({ error: 'Row not found' }, { status: 404 });
 
   const row = existing[0];
+  const isEditRequest = Object.prototype.hasOwnProperty.call(body, 'choice_value') || Object.prototype.hasOwnProperty.call(body, 'description_element');
+
+  if (isEditRequest) {
+    const choiceValue = String(body.choice_value || '').trim();
+    const descriptionElement = String(body.description_element || '').trim() || null;
+    if (!choiceValue) return NextResponse.json({ error: 'choice_value is required when editing a row' }, { status: 400 });
+
+    const updated = await sql`
+      update sku_rules
+      set choice_value = ${choiceValue},
+          description_element = ${descriptionElement}
+      where id = ${id}
+      returning id, digit_position, option_name, code_value, choice_value, description_element, is_active, deactivated_at, deactivation_reason
+    ` as any[];
+
+    await writeAuditLog({
+      userId: auth.user.id,
+      actionKey: 'sku.manage.edit',
+      entityType: 'sku_rule',
+      entityId: String(id),
+      oldData: row,
+      newData: { ...updated[0], updated_by_email: auth.user.email, updated_at: new Date().toISOString() }
+    });
+
+    return NextResponse.json(updated[0]);
+  }
+
+  const isActive = !!body.is_active;
+  const reason = String(body.deactivation_reason || '').trim();
 
   if (!isActive && !reason) {
     return NextResponse.json({ error: 'deactivation_reason is required when deactivating a line' }, { status: 400 });
@@ -124,6 +188,7 @@ export async function PATCH(request: Request) {
       from sku_rules
       where id <> ${id}
         and digit_position = ${row.digit_position}
+        and lower(option_name) = lower(${row.option_name})
         and upper(code_value) = ${normalizeCodeValue(row.code_value)}
         and is_active = true
       limit 1

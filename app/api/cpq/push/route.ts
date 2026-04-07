@@ -2,6 +2,14 @@ import { NextResponse } from 'next/server';
 import { requireApiRole } from '@/lib/api-auth';
 import { sql } from '@/lib/db';
 
+function pick(row: any, ...keys: string[]) {
+  for (const key of keys) {
+    const value = row?.[key];
+    if (value !== undefined && value !== null) return String(value);
+  }
+  return '';
+}
+
 export async function POST(request: Request) {
   const auth = await requireApiRole('builder.push');
   if (auth instanceof NextResponse) return auth;
@@ -19,11 +27,11 @@ export async function POST(request: Request) {
   const skippedDuplicates: string[] = [];
 
   for (const row of rows) {
-    const skuCode = String(row['SKU code'] || '').trim();
-    const cpqRuleset = String(row['CPQRuleset'] || '').trim();
+    const skuCode = pick(row, 'SKU code').trim();
+    const cpqRuleset = pick(row, 'CPQRuleset').trim();
     if (!skuCode || !cpqRuleset) continue;
 
-    await sql`
+    const cpqProductInsert = await sql`
       insert into cpq_products (
         import_run_id, cpq_ruleset, product_assist, product_family, product_line, product_model, product_type,
         brake_reverse, brake_non_reverse, sku_code, description, handlebar_type, speeds, mudguardsandrack, territory,
@@ -33,18 +41,20 @@ export async function POST(request: Request) {
         position29, position30, created_by
       )
       values (
-        ${runId || null}, ${cpqRuleset}, ${String(row['ProductAssist'] || '')}, ${String(row['ProductFamily'] || '')},
-        ${String(row['ProductLine'] || '')}, ${String(row['ProductModel'] || '')}, ${String(row['ProductType'] || '')},
+        ${runId || null}, ${cpqRuleset}, ${pick(row, 'ProductAssist')}, ${pick(row, 'ProductFamily')},
+        ${pick(row, 'ProductLine')}, ${pick(row, 'ProductModel')}, ${pick(row, 'ProductType')},
         ${brakeMode === 'reverse' ? 'yes' : 'no'}, ${brakeMode === 'non_reverse' ? 'yes' : 'no'},
-        ${skuCode}, ${String(row['Description'] || '')}, ${String(row['HandlebarType'] || '')}, ${String(row['Speeds'] || '')}, ${String(row['MudguardsandRack'] || '')}, ${String(row['Territory'] || '')},
-        ${String(row['MainFrameColour'] || '')}, ${String(row['RearFrameColour'] || '')}, ${String(row['FrontCarrierBlock'] || '')}, ${String(row['Lighting'] || '')}, ${String(row['SaddleHeight'] || '')},
-        ${String(row['GearRatio'] || '')}, ${String(row['Saddle'] || '')}, ${String(row['Tyre'] || '')}, ${String(row['Brakes'] || '')}, ${String(row['Pedals'] || '')},
-        ${String(row['Saddlebag'] || '')}, ${String(row['Suspension'] || '')}, ${String(row['BikeType'] || '')}, ${String(row['Toolkit'] || '')}, ${String(row['SaddleLight'] || '')},
-        ${String(row['ConfigCode'] || '')}, ${String(row['OptionBox'] || '')}, ${String(row['FrameMaterial'] || '')}, ${String(row['FrameSet'] || '')}, ${String(row['ComponentColour'] || '')},
-        ${String(row['OnBikeAccessories'] || '')}, ${String(row['HandlebarStemColour'] || '')}, ${String(row['HandlebarPinColour'] || '')}, ${String(row['FrontFrameColour'] || '')},
-        ${String(row['FrontForkColour'] || '')}, ${String(row['Position29'] || '')}, ${String(row['Position30'] || '')}, ${auth.user.id}
+        ${skuCode}, ${pick(row, 'Description')}, ${pick(row, 'HandlebarType')}, ${pick(row, 'Speeds')}, ${pick(row, 'MudguardsAndRack', 'MudguardsandRack')}, ${pick(row, 'Territory')},
+        ${pick(row, 'MainFrameColour')}, ${pick(row, 'RearFrameColour')}, ${pick(row, 'FrontCarrierBlock')}, ${pick(row, 'Lighting')}, ${pick(row, 'SaddleHeight')},
+        ${pick(row, 'GearRatio')}, ${pick(row, 'Saddle')}, ${pick(row, 'Tyre')}, ${pick(row, 'Brakes')}, ${pick(row, 'Pedals')},
+        ${pick(row, 'Saddlebag')}, ${pick(row, 'Suspension')}, ${pick(row, 'BikeType')}, ${pick(row, 'Toolkit')}, ${pick(row, 'SaddleLight')},
+        ${pick(row, 'ConfigCode')}, ${pick(row, 'OptionBox')}, ${pick(row, 'FrameMaterial')}, ${pick(row, 'FrameSet')}, ${pick(row, 'ComponentColour')},
+        ${pick(row, 'OnBikeAccessories')}, ${pick(row, 'HandlebarStemColour')}, ${pick(row, 'HandlebarPinColour')}, ${pick(row, 'FrontFrameColour')},
+        ${pick(row, 'FrontForkColour')}, ${pick(row, 'Position29')}, ${pick(row, 'Position30')}, ${auth.user.id}
       )
-    `;
+      returning id
+    ` as any[];
+    const cpqProductId = Number(cpqProductInsert[0].id);
 
     const existingActive = await sql`
       select id from cpq_sku_rules
@@ -62,24 +72,25 @@ export async function POST(request: Request) {
       skippedDuplicates.push(`${skuCode} (${cpqRuleset})`);
       await sql`
         update cpq_sku_rules
-        set bike_type = ${String(row['BikeType'] || '')},
-            handlebar = ${String(row['HandlebarType'] || '')},
-            speed = ${String(row['Speeds'] || '')},
-            rack = ${String(row['MudguardsandRack'] || '')},
-            colour = ${String(row['MainFrameColour'] || '')},
-            light = ${String(row['Lighting'] || '')},
-            seatpost_length = ${String(row['SaddleHeight'] || '')},
-            saddle = ${String(row['Saddle'] || '')},
-            description = ${String(row['Description'] || '')},
+        set cpq_product_id = ${cpqProductId},
+            bike_type = ${pick(row, 'BikeType')},
+            handlebar = ${pick(row, 'HandlebarType')},
+            speed = ${pick(row, 'Speeds')},
+            rack = ${pick(row, 'MudguardsAndRack', 'MudguardsandRack')},
+            colour = ${pick(row, 'MainFrameColour')},
+            light = ${pick(row, 'Lighting')},
+            seatpost_length = ${pick(row, 'SaddleHeight')},
+            saddle = ${pick(row, 'Saddle')},
+            description = ${pick(row, 'Description')},
             updated_at = now()
         where id = ${cpqRuleId}
       `;
     } else {
       const inserted = await sql`
-        insert into cpq_sku_rules (sku_code, cpq_ruleset, brake_type, bike_type, handlebar, speed, rack, colour, light, seatpost_length, saddle, description, created_by)
+        insert into cpq_sku_rules (cpq_product_id, sku_code, cpq_ruleset, brake_type, bike_type, handlebar, speed, rack, colour, light, seatpost_length, saddle, description, created_by)
         values (
-          ${skuCode}, ${cpqRuleset}, ${brakeMode}, ${String(row['BikeType'] || '')}, ${String(row['HandlebarType'] || '')}, ${String(row['Speeds'] || '')}, ${String(row['MudguardsandRack'] || '')},
-          ${String(row['MainFrameColour'] || '')}, ${String(row['Lighting'] || '')}, ${String(row['SaddleHeight'] || '')}, ${String(row['Saddle'] || '')}, ${String(row['Description'] || '')}, ${auth.user.id}
+          ${cpqProductId}, ${skuCode}, ${cpqRuleset}, ${brakeMode}, ${pick(row, 'BikeType')}, ${pick(row, 'HandlebarType')}, ${pick(row, 'Speeds')}, ${pick(row, 'MudguardsAndRack', 'MudguardsandRack')},
+          ${pick(row, 'MainFrameColour')}, ${pick(row, 'Lighting')}, ${pick(row, 'SaddleHeight')}, ${pick(row, 'Saddle')}, ${pick(row, 'Description')}, ${auth.user.id}
         )
         returning id
       ` as any[];
@@ -87,7 +98,7 @@ export async function POST(request: Request) {
       pushed += 1;
     }
 
-    const cpqCountries = await sql`select id, brake_type from cpq_countries` as any[];
+    const cpqCountries = await sql`select id from cpq_countries` as any[];
     for (const country of cpqCountries) {
       await sql`
         insert into cpq_availability (cpq_sku_rule_id, cpq_country_id, available, updated_at)
