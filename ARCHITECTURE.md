@@ -1,221 +1,145 @@
-# AppBikeConfig Architecture (Reset)
+# AppBikeConfig Architecture
 
 ## 1) Overview
-AppBikeConfig is Brompton’s internal SKU configuration and market-allocation system. It manages SKU rule definition, SKU generation, and country-level activation using a normalized CPQ data model.
+AppBikeConfig is Brompton’s internal SKU configuration and market-allocation system. It now uses a **role + explicit permission** model and a **config-driven SKU generation engine** (required digits, selection mode, dependency rules).
 
-### High-level architecture
-- **Source-of-truth layer**: `cpq_import_rows` (normalized option rows).
-- **Control layer**: `sku_rules` (active/inactive rule lifecycle and digit/code constraints).
-- **Identity layer**: `cpq_products` (one row per SKU identity).
-- **Attribute mapping layer**: `cpq_product_attributes` (product-to-option references via `cpq_import_rows`).
-- **Read compatibility layer**: `cpq_products_flat` (joined read model for UI and integrations).
+Core goals:
+- keep normalized CPQ references intact (`cpq_import_rows` -> `cpq_product_attributes`)
+- avoid hard-coded SKU generation rules
+- enforce authorization in backend + frontend for all sensitive actions
 
 ---
 
-## 2) Core concepts
+## 2) Security and authorization model
 
-### SKU definition
-A SKU is defined by:
-- static product metadata (ruleset, line, family, model, type)
-- digit-based option assignments (`digit_position` + `code_value`)
-- resolved option labels (`choice_value`) from normalized import rows
+### 2.1 Role baseline + permission capability layer
+- `roles` and `user_roles` still define baseline access groups.
+- New `permissions` master table defines capabilities (`permission_key`).
+- `role_permissions` maps baseline permissions to each role.
+- `user_permissions` supports explicit per-user overrides:
+  - `granted = true` => force allow
+  - `granted = false` => force deny
+  - missing row => inherit from role baseline
 
-### CPQ model
-The CPQ model is reference-based:
-- options are not duplicated as raw free text in product records
-- product attributes point to normalized option rows
-- canonical option-name normalization ensures consistent joins and duplicate detection
+### 2.2 Effective permission resolution
+At login/API time:
+1. Resolve user roles.
+2. Load permissions granted by role mappings.
+3. Apply `user_permissions` overrides.
+4. Effective granted permissions are used by `requireApiRole(...)`.
 
-### Matrix allocation
-Generated SKUs are pushed into sales allocation (`SKU vs Country`) where availability is managed by country and surfaced through matrix APIs/UI.
-
----
-
-## 3) Data model
-
-### `cpq_import_rows`
-Normalized CPQ option rows and diagnostics records.
-- stores option-level rows (`option_name`, `choice_value`, `digit_position`, `code_value`)
-- includes row status metadata (`imported`, `skipped`, `error`) and action diagnostics
-- is the canonical reference table for option values
-
-### `sku_rules`
-Rule lifecycle and generation control.
-- stores active/inactive rules per digit/option/code
-- enforces operational structure for generation
-- supports safe edits/deactivation without destructive history loss
-
-### `cpq_products`
-Product identity records.
-- unique SKU identity (`sku_code`, ruleset, brake mode context)
-- parent record for mapped product attributes
-
-### `cpq_product_attributes`
-Product-to-option mapping table.
-- each product option references a `cpq_import_rows.id`
-- enables normalized propagation of option updates
-
-### `cpq_products_flat`
-Compatibility read model.
-- denormalized/select-friendly view for UI/API consumption
-- preserves backward-compatible read behavior while write-path remains normalized
-
-### `cpq_import_row_translations` (if enabled)
-Localization extension table.
-- stores translated labels per import row
-- designed for locale-specific UI/export use without changing core references
+### 2.3 Page/action authorization
+- **Product - SKU definition delete**: `sku.delete` (baseline mapped to `sys_admin` + `product_admin`).
+- **Admin - Users + permission override editing**: UI restricted to `sys_admin`; override API path also requires `permissions.manage`.
+- **Product - Setup**: `setup.manage`.
+- **Feature flags**: `feature_flags.manage`.
 
 ---
 
-## 4) Data flow
+## 3) Product - SKU definition (delete behavior)
 
-### A. Product – SKU definition
-1. User manages `sku_rules` (add/edit/deactivate).
-2. System validates structural consistency (digit-option constraints, active-state behavior).
-3. Rules become available to generation APIs.
+### 3.1 Lifecycle actions
+- Add/edit/deactivate/reactivate still use `sku.manage`.
+- New **permanent delete** action uses `DELETE /api/sku-rules?id=...` and requires `sku.delete`.
 
-### B. Product – Create SKU (generation flow)
-1. UI loads grouped options from `/api/cpq/options`.
-2. User chooses product metadata + digit choices.
-3. `/api/cpq/generate` produces combinations using canonical normalization + duplicate handling.
-4. Generated rows carry option references (`__refs`) where available.
+### 3.2 Referential safety
+Delete is blocked when the SKU definition is already referenced through normalized generated products:
+- checks matching `cpq_import_rows` by digit/option/code
+- joins to `cpq_product_attributes`
+- if references exist, API returns `409` with a clear message
 
-### C. Push to Sales – SKU vs Country
-1. User submits selected generated rows to `/api/cpq/push`.
-2. API creates `cpq_products` identity rows.
-3. API resolves/links attributes into `cpq_product_attributes` via `cpq_import_rows` references.
-4. API inserts activation records consumed by matrix pages/APIs.
+No silent data corruption is allowed.
 
 ---
 
-## 5) Key rules
+## 4) Product - Setup configuration model
 
-### Normalization rules
-- option names are canonicalized in one module (`lib/cpq-normalization.ts`)
-- aliases map to a single canonical option label
-- code values are uppercase-normalized
+### 4.1 `sku_digit_option_config`
+Per digit (1..30), configurable behavior:
+- `is_required` (true/false)
+- `selection_mode` (`single` or `multi`)
+- `is_active`
 
-### Duplicate handling
-- duplicate digit+code entries are collapsed by latest rule where applicable
-- push path skips duplicate SKU insertion
-- generation path emits deterministic combinations
+### 4.2 `sku_generation_dependency_rules`
+Configurable dependency/forced-match rules:
+- `source_digit_position`
+- `target_digit_position`
+- `rule_type` (currently `match_code`)
+- `active`
+- `sort_order`
 
-### Active/inactive behavior
-- generation uses active rules only
-- deactivated rules remain historical, not deleted
+Examples seeded by migration:
+- Digit 5 -> Digit 27 (`match_code`)
+- Digit 6 -> Digits 25/26/28 (`match_code`)
 
-### Propagation behavior
-- edits to normalized option records propagate through reference lookups
-- UI read paths consume flattened/joined outputs, write paths keep references
-
----
-
-## 6) API layer
-
-### Canonical CPQ endpoints
-- `GET /api/cpq/options`
-  - returns grouped product fields and digit-based option choices
-- `POST /api/cpq/generate`
-  - generates SKU combinations from selected normalized options
-- `POST /api/cpq/push`
-  - persists generated SKU selections into normalized product tables and sales matrix structures
-
-### Supporting endpoints (non-CPQ-core)
-- `/api/sku-rules` for definition lifecycle
-- matrix endpoints for country allocation and BC status workflows
-
-> Legacy CSV-import route has been removed from the canonical CPQ API surface.
+No digit-specific hard-coded business logic is used in code.
 
 ---
 
-## 7) UI pages
+## 5) Product - Create SKU generation engine
 
-### Sales – SKU vs Country
-Country allocation management over generated/pushed SKUs.
+### 5.1 Input loading
+`GET /api/cpq/options` now returns:
+- product field options
+- digit option groups
+- per-digit config flags (`isRequired`, `selectionMode`)
+- active dependency rules
 
-### Product – SKU definition
-Operational rule authoring and lifecycle controls.
+### 5.2 Generation rules
+`POST /api/cpq/generate` now enforces:
+- required digit validation
+- single-select validation for `selection_mode = single`
+- dependency constraints (`match_code`) that remove invalid cross-combinations
 
-### Product – Create SKU
-Table-first generation workspace driven by normalized option references.
-
-### Admin pages
-Roles, feature flags, and system setup controls.
-
----
-
-## 8) Code organization
-
-- `lib/cpq-core.ts`
-  - public CPQ core export surface
-- `lib/cpq-normalization.ts`
-  - canonical option normalization and mapping utilities
-- `lib/cpq-generation.ts`
-  - generation engine and metadata/diagnostics logic
-- `lib/cpq-product-attributes.ts`
-  - product attribute extraction and import-row keying
-
-This split enforces single-responsibility and removes duplicate canonicalization logic across API handlers.
+This is config-table driven; no hard-coded Main/Rear frame logic in the generator.
 
 ---
 
-## 9) Performance and query guidance
+## 6) UI architecture updates
 
-- Prefer `cpq_products_flat` for read-heavy UI screens.
-- Keep write-path operations normalized (`cpq_products` + `cpq_product_attributes`).
-- Avoid duplicate frontend post-processing where SQL/view can return already-shaped data.
-- Maintain indexes on key join columns (`cpq_import_row_id`, `sku_code`, `option_name`, `choice_value`, foreign keys).
+### 6.1 Product - SKU definition
+- table viewport and wrapper are now flex-constrained for reliable vertical scroll.
+- permanent delete action has:
+  - conditional visibility (permission based)
+  - irreversible confirmation modal
+  - success/error feedback
+
+### 6.2 Admin - Users
+- still `sys_admin` managed.
+- role assignment remains baseline control.
+- new per-user permission override panel supports `inherit / allow / deny` by permission key.
+
+### 6.3 Product - Setup (new operational setup page)
+- manages digit required/single-vs-multi configuration.
+- manages dependency rules (`match_code`) with order and active flags.
+
+### 6.4 Product - Create SKU filter UX improvements
+- cleaner reset actions for option selections and generated filters.
+- searchable filter-column list for large generated-column sets.
+- digit selector reflects required/optional + single/multi behavior.
 
 ---
 
-## 10) Extensibility roadmap
+## 7) Data model additions
 
-### Translations
-- expand `cpq_import_row_translations` for locale-aware labels without duplicating SKU logic
+New tables:
+- `permissions`
+- `role_permissions`
+- `user_permissions`
+- `sku_digit_option_config`
+- `sku_generation_dependency_rules`
 
-### NetSuite stock integration
-- connect stock/availability feeds at matrix/read layer
-- keep SKU identity stable through `cpq_products` keys
-
-### BigCommerce integration
-- retain BC status checks in matrix workflows
-- extend sync metadata without coupling into core generation engine
+SQL delivered in:
+- migration: `sql/012_permissions_and_sku_generation_config.sql`
+- base schema extension: `sql/schema.sql`
+- seed defaults: `sql/seed.sql`
 
 ---
 
-## 11) Textual architecture diagram
+## 8) End-to-end flow summary
 
-```text
-[Product - SKU definition UI]
-        |
-        v
-    /api/sku-rules  ----->  sku_rules (control/lifecycle)
-
-[Product - Create SKU UI]
-   |            |
-   |            +--> GET /api/cpq/options ---> sku_rules + cpq_import_rows
-   |
-   +--> POST /api/cpq/generate ---> cpq core (normalization + generation)
-                                   |
-                                   v
-                           generated SKU rows (+ option refs)
-                                   |
-                                   v
-                           POST /api/cpq/push
-                                   |
-                 +-----------------+------------------+
-                 |                                    |
-                 v                                    v
-           cpq_products                      cpq_product_attributes
-                                                    |
-                                                    v
-                                              cpq_import_rows
-
-                            read compatibility
-                                   |
-                                   v
-                             cpq_products_flat
-                                   |
-                                   v
-                      Sales - SKU vs Country / matrix UI
-```
+1. Admin configures Product - Setup digit behavior + dependencies.
+2. Product - Create SKU loads those configs and validates user selections.
+3. Generator produces only valid combinations constrained by rules.
+4. Push flow continues writing normalized product identity + attribute references.
+5. SKU definition deletion is permanent but blocked when referenced.

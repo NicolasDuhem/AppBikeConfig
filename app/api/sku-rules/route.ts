@@ -219,3 +219,53 @@ export async function PATCH(request: Request) {
 
   return NextResponse.json(updated[0]);
 }
+
+
+export async function DELETE(request: Request) {
+  const auth = await requireApiRole('sku.delete');
+  if (auth instanceof NextResponse) return auth;
+
+  const { searchParams } = new URL(request.url);
+  const id = Number(searchParams.get('id') || 0);
+  if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
+
+  const existing = await sql`select * from sku_rules where id = ${id}` as any[];
+  if (!existing.length) return NextResponse.json({ error: 'Row not found' }, { status: 404 });
+  const row = existing[0];
+
+  const refs = await sql`
+    with matched_import_rows as (
+      select id
+      from cpq_import_rows
+      where digit_position = ${row.digit_position}
+        and upper(code_value) = ${normalizeCodeValue(String(row.code_value || ''))}
+        and lower(option_name) = lower(${String(row.option_name || '')})
+    )
+    select count(*)::int as references_count
+    from cpq_product_attributes a
+    join matched_import_rows mir on mir.id = a.cpq_import_row_id
+  ` as Array<{ references_count: number }>;
+
+  if (Number(refs[0]?.references_count || 0) > 0) {
+    return NextResponse.json({
+      error: 'Cannot delete this SKU definition because it is already referenced by generated products/attributes. Remove dependencies first.'
+    }, { status: 409 });
+  }
+
+  const deleted = await sql`
+    delete from sku_rules
+    where id = ${id}
+    returning id, digit_position, option_name, code_value, choice_value
+  ` as any[];
+
+  await writeAuditLog({
+    userId: auth.user.id,
+    actionKey: 'sku.delete',
+    entityType: 'sku_rule',
+    entityId: String(id),
+    oldData: row,
+    newData: { deleted: true }
+  });
+
+  return NextResponse.json({ ok: true, row: deleted[0] || null });
+}

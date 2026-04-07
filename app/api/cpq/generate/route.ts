@@ -12,7 +12,10 @@ type SelectedDigitChoice = {
   cpqImportRowId: number | null;
 };
 
-function buildRowsFromSelectedChoices(payload: any) {
+type DigitConfig = { digit_position: number; option_name: string; is_required: boolean; selection_mode: 'single' | 'multi' };
+type DependencyRule = { source_digit_position: number; target_digit_position: number; rule_type: 'match_code'; active: boolean; sort_order: number };
+
+function buildRowsFromSelectedChoices(payload: any, digitConfigs: DigitConfig[], dependencyRules: DependencyRule[]) {
   const cpqRuleset = String(payload?.cpqRuleset || '').trim();
   const productAssist = String(payload?.productAssist || '').trim();
   const productFamily = String(payload?.productFamily || '').trim();
@@ -42,6 +45,19 @@ function buildRowsFromSelectedChoices(payload: any) {
     grouped.set(digitPosition, bucket);
   }
 
+  const configByDigit = new Map<number, DigitConfig>();
+  digitConfigs.forEach((cfg) => configByDigit.set(Number(cfg.digit_position), cfg));
+
+  for (const cfg of digitConfigs) {
+    const selected = grouped.get(Number(cfg.digit_position)) || [];
+    if (cfg.is_required && !selected.length) {
+      return { error: `Digit ${cfg.digit_position} (${cfg.option_name}) is required.` };
+    }
+    if (cfg.selection_mode === 'single' && selected.length > 1) {
+      return { error: `Digit ${cfg.digit_position} (${cfg.option_name}) allows only a single selection.` };
+    }
+  }
+
   const digits = Array.from(grouped.keys()).sort((a, b) => a - b);
   if (!digits.length) return { rows: [] };
 
@@ -63,7 +79,17 @@ function buildRowsFromSelectedChoices(payload: any) {
     combinations = next;
   }
 
-  const rows = combinations.map((combo) => {
+  const activeRules = dependencyRules.filter((rule) => rule.active && rule.rule_type === 'match_code');
+  const constrained = combinations.filter((combo) => {
+    for (const rule of activeRules) {
+      const source = combo.byDigitCode[rule.source_digit_position];
+      const target = combo.byDigitCode[rule.target_digit_position];
+      if (source && target && source !== target) return false;
+    }
+    return true;
+  });
+
+  const rows = constrained.map((combo) => {
     const row: Record<string, any> = Object.fromEntries(CPQ_COLUMNS.map((column) => [column, '']));
     const chars = Array(30).fill('_');
     for (const [digit, codeValue] of Object.entries(combo.byDigitCode)) {
@@ -81,7 +107,7 @@ function buildRowsFromSelectedChoices(payload: any) {
     row.ProductType = productType;
     row.ProductModel = productModel;
     row['SKU code'] = skuCode;
-    row.Description = productType.toLowerCase() === 'special edition' ? `${productLine} ${productModel}` : `${productLine} ${productModel}`;
+    row.Description = `${productLine} ${productModel}`;
     row.ConfigCode = skuCode;
     row.OptionBox = productType.toLowerCase() === 'special edition' ? 'Special' : 'Standard';
 
@@ -110,8 +136,25 @@ export async function POST(request: Request) {
   if (auth instanceof NextResponse) return auth;
 
   try {
-    const body = await request.json();
-    const result = buildRowsFromSelectedChoices(body);
+    const [body, digitConfigRows, dependencyRuleRows] = await Promise.all([
+      request.json(),
+      sql`select digit_position, option_name, is_required, selection_mode from sku_digit_option_config where is_active = true order by digit_position`,
+      sql`select source_digit_position, target_digit_position, rule_type, active, sort_order from sku_generation_dependency_rules where active = true order by sort_order`
+    ]);
+    const digitConfigs = (digitConfigRows as any[]).map((row) => ({
+      digit_position: Number(row.digit_position),
+      option_name: String(row.option_name),
+      is_required: Boolean(row.is_required),
+      selection_mode: String(row.selection_mode) === 'multi' ? 'multi' : 'single'
+    })) as DigitConfig[];
+    const dependencyRules = (dependencyRuleRows as any[]).map((row) => ({
+      source_digit_position: Number(row.source_digit_position),
+      target_digit_position: Number(row.target_digit_position),
+      rule_type: 'match_code' as const,
+      active: Boolean(row.active),
+      sort_order: Number(row.sort_order || 0)
+    })) as DependencyRule[];
+    const result = buildRowsFromSelectedChoices(body, digitConfigs, dependencyRules);
     if (result.error) return NextResponse.json({ success: false, error: result.error }, { status: 400 });
     return NextResponse.json({ success: true, rows: result.rows || [] });
   } catch (error) {

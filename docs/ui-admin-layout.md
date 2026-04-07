@@ -1,6 +1,6 @@
 # Admin UI Layout Pattern
 
-This document defines the shared compact admin/table layout used across Sales - SKU vs Country, Product - SKU definition, Product - Create SKU, Admin - Users, and Admin - Feature flag.
+This document defines the shared compact admin/table layout used across Sales - SKU vs Country, Product - SKU definition, Product - Create SKU, Product - Setup, Admin - Users, and Admin - Feature flag.
 
 ## Desktop target and density
 
@@ -12,7 +12,7 @@ This document defines the shared compact admin/table layout used across Sales - 
 
 ## Shared page-shell pattern
 
-All admin pages should follow this structure:
+All admin/product pages should follow this structure:
 
 1. Compact page header (`AdminPageShell` title + subtitle).
 2. Compact action/toolbar row for operational controls.
@@ -20,53 +20,42 @@ All admin pages should follow this structure:
 4. Dominant table area (`tableWrap`) in an internal viewport container (`tableViewport`) with sticky headers.
 5. Compact notes/chips for status and diagnostics.
 
-## Global layout rules
+## Product - SKU definition updates
 
-- Use near-full width page container with reduced outer padding.
-- Keep navigation visible and active tab obvious.
-- Keep vertical rhythm tight (small gaps between sections).
-- Prefer chips/inline summaries over large stacked cards.
-- Keep admin pages in a fixed-height shell with compact Brompton header + compact navigation to maximize table rows.
+- The table area uses flex + internal overflow so vertical scroll remains inside the table viewport.
+- Permanent delete action is available only to users with `sku.delete`.
+- Delete uses an explicit irreversible confirmation modal and shows API feedback.
 
-## Show/Hide filters pattern
+## Admin - Users updates
 
-The standard table workflow now includes:
+- Only `sys_admin` sees management controls.
+- Role assignment remains baseline access.
+- Per-user permission override UI supports:
+  - Inherit role
+  - Allow
+  - Deny
 
-- `Show filters` / `Hide filters` control in the main toolbar.
-- Filters can be collapsed to let the table consume full width.
-- `Reset filters` available in toolbar and/or filter header.
-- Multi-select dropdown filters are preferred for categorical fields.
+## Product - Setup page pattern
 
-## Sales - SKU vs Country filter UX pattern
+- New page name: **Product - Setup**.
+- Compact split-table model:
+  - Digit option behavior table (`is_required`, `selection_mode`, active)
+  - Dependency rules table (`source digit`, `target digit`, `rule_type`, order, active)
 
-- Keep free-text search only for SKU search where text match is needed.
-- Use multi-select dropdown filters for business attributes, including:
-  - Ruleset
-  - BC Status
-  - Country
-  - CPQ attributes (ProductAssist, ProductFamily, ProductLine, ProductModel, ProductType, HandlebarType, Speeds, MudguardsAndRack, etc.)
-- When filters are hidden, matrix table expands to the full page width.
+## Product - Create SKU filter UX pattern
 
-## Product - Create SKU compact generation pattern
+- Keep generated table as primary focus.
+- Provide clear reset controls:
+  - Reset option selections
+  - Reset generated filters
+- Filter section adds searchable filter-column finder for faster scanning.
+- Digit selectors should render as:
+  - single select for `selection_mode = single`
+  - multi select for `selection_mode = multi`
+- Required/optional labels must be visible at digit group level.
 
-- Keep product-level configuration controls in a compact top section (ruleset + single-select fields).
-- Render digit-based option multi-select controls in a compact section grouped by digit.
-- Use a compact operational toolbar for generate/selection/push actions.
-- Provide filter section and column manager as optional expandable sections.
+## Authorization consistency rule
 
-## Column visibility controls
-
-- Product - Create SKU includes a column visibility manager:
-  - Show/hide per column via checkbox list.
-  - Reset to default visible set.
-- Reordering/resizing is not required yet; responsive width behavior is required and implemented.
-
-## Product - SKU definition page guidance
-
-- Keep add-rule form compact and directly above the table.
-- Keep search/status controls in a compact toolbar.
-- Use summary chips and concise notes; avoid oversized stacked intro content.
-
-## Implementation note
-
-This UI redesign keeps the normalized CPQ model while shifting Product - Create SKU to a DB-driven selection/generation flow.
+For all pages/actions above:
+- hide controls in UI when unauthorized
+- enforce same authorization in API/backend

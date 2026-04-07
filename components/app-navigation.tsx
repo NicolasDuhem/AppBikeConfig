@@ -15,15 +15,17 @@ export default function AppNavigation() {
       .then((res) => res.json())
       .then((data) => {
         const roleList: string[] = data.roles || [];
+        const permissionList: string[] = data.permissions || [];
         const cpqEnabled = !!data.import_csv_cpq;
 
         const next: NavLink[] = [
           { href: cpqEnabled ? '/cpq-matrix' : '/matrix', label: cpqEnabled ? 'Sales - SKU vs Country' : 'Matrix' },
           { href: '/sku-definition', label: 'Product - SKU definition' },
-          { href: '/bike-builder', label: 'Bike Builder', hidden: cpqEnabled },
+          { href: '/bike-builder', label: 'Product - Legacy Builder', hidden: cpqEnabled },
           { href: '/cpq-feature', label: 'Product - Create SKU', hidden: !cpqEnabled },
+          { href: '/setup', label: 'Product - Setup', hidden: !permissionList.includes('setup.manage') },
           { href: '/users', label: 'Admin - Users' },
-          { href: '/feature-flags', label: 'Admin - Feature flag', hidden: !roleList.includes('sys_admin') }
+          { href: '/feature-flags', label: 'Admin - Feature flag', hidden: !roleList.includes('sys_admin') && !permissionList.includes('feature_flags.manage') }
         ];
         setLinks(next);
       })

@@ -104,3 +104,50 @@ create table if not exists cpq_availability (
   updated_at timestamptz not null default now(),
   primary key (cpq_sku_rule_id, cpq_country_id)
 );
+
+create table if not exists permissions (
+  id bigserial primary key,
+  permission_key text not null unique,
+  permission_name text not null,
+  description text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists role_permissions (
+  role_key text not null references roles(role_key) on delete cascade,
+  permission_id bigint not null references permissions(id) on delete cascade,
+  primary key (role_key, permission_id)
+);
+
+create table if not exists user_permissions (
+  user_id bigint not null references app_users(id) on delete cascade,
+  permission_id bigint not null references permissions(id) on delete cascade,
+  granted boolean not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (user_id, permission_id)
+);
+
+create table if not exists sku_digit_option_config (
+  id bigserial primary key,
+  digit_position integer not null unique check (digit_position between 1 and 30),
+  option_name text not null,
+  is_required boolean not null default false,
+  selection_mode text not null default 'single' check (selection_mode in ('single', 'multi')),
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists sku_generation_dependency_rules (
+  id bigserial primary key,
+  source_digit_position integer not null check (source_digit_position between 1 and 30),
+  target_digit_position integer not null check (target_digit_position between 1 and 30),
+  rule_type text not null check (rule_type in ('match_code')),
+  active boolean not null default true,
+  sort_order integer not null default 0,
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (source_digit_position, target_digit_position, rule_type)
+);
