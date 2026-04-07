@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import type { SkuRule } from '@/lib/types';
 import AdminPageShell from '@/components/admin/admin-page-shell';
 
@@ -37,6 +38,7 @@ const mapping: Record<string, keyof GeneratedRow | 'ignore'> = {
 };
 
 export default function BikeBuilderPage() {
+  const router = useRouter();
   const [rules, setRules] = useState<SkuRule[]>([]);
   const [selected, setSelected] = useState<Record<string, string[]>>({});
   const [generated, setGenerated] = useState<GeneratedRow[]>([]);
@@ -44,11 +46,15 @@ export default function BikeBuilderPage() {
   const [permissions, setPermissions] = useState<string[]>([]);
 
   useEffect(() => {
-    Promise.all([fetch('/api/sku-rules').then((r) => r.json()), fetch('/api/me').then((r) => r.json())]).then(([rulesData, me]) => {
+    Promise.all([fetch('/api/feature-flags/public').then((r) => r.json()), fetch('/api/sku-rules').then((r) => r.json()), fetch('/api/me').then((r) => r.json())]).then(([flags, rulesData, me]) => {
+      if (flags.import_csv_cpq) {
+        router.replace('/cpq-feature');
+        return;
+      }
       setRules((rulesData.rows || []) as SkuRule[]);
       setPermissions(me.permissions || []);
     });
-  }, []);
+  }, [router]);
 
   const grouped = useMemo(() => {
     const map: Record<string, SkuRule[]> = {};
