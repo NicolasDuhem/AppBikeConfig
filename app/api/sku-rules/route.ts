@@ -38,24 +38,6 @@ async function getDigitIssues() {
   return rows.map((row) => ({ digit_position: Number(row.digit_position), option_names: row.option_names }));
 }
 
-const selectRowsSql = `
-  select r.id, r.digit_position, r.option_name, r.code_value, r.choice_value, null::text as description_element,
-         coalesce(r.is_active, true) as is_active, r.deactivated_at, r.deactivation_reason,
-         edit_meta.last_edited_by_email, edit_meta.last_edited_at
-  from cpq_import_rows r
-  left join lateral (
-    select u.email as last_edited_by_email, a.created_at as last_edited_at
-    from audit_log a
-    left join app_users u on u.id = a.user_id
-    where a.entity_type = 'cpq_import_row'
-      and a.entity_id = r.id::text
-      and a.action_key = 'sku.manage.edit'
-    order by a.created_at desc
-    limit 1
-  ) edit_meta on true
-  where r.status = 'imported'
-`;
-
 export async function GET(request: Request) {
   const auth = await requireApiLogin();
   if (auth instanceof NextResponse) return auth;
@@ -64,8 +46,43 @@ export async function GET(request: Request) {
   const includeInactive = searchParams.get('include_inactive') === '1';
 
   const rows = includeInactive
-    ? await sql.unsafe(`${selectRowsSql} order by r.digit_position, r.option_name, r.choice_value, r.id`)
-    : await sql.unsafe(`${selectRowsSql} and coalesce(r.is_active, true) = true order by r.digit_position, r.option_name, r.choice_value, r.id`);
+    ? await sql`
+      select r.id, r.digit_position, r.option_name, r.code_value, r.choice_value, null::text as description_element,
+             coalesce(r.is_active, true) as is_active, r.deactivated_at, r.deactivation_reason,
+             edit_meta.last_edited_by_email, edit_meta.last_edited_at
+      from cpq_import_rows r
+      left join lateral (
+        select u.email as last_edited_by_email, a.created_at as last_edited_at
+        from audit_log a
+        left join app_users u on u.id = a.user_id
+        where a.entity_type = 'cpq_import_row'
+          and a.entity_id = r.id::text
+          and a.action_key = 'sku.manage.edit'
+        order by a.created_at desc
+        limit 1
+      ) edit_meta on true
+      where r.status = 'imported'
+      order by r.digit_position, r.option_name, r.choice_value, r.id
+    `
+    : await sql`
+      select r.id, r.digit_position, r.option_name, r.code_value, r.choice_value, null::text as description_element,
+             coalesce(r.is_active, true) as is_active, r.deactivated_at, r.deactivation_reason,
+             edit_meta.last_edited_by_email, edit_meta.last_edited_at
+      from cpq_import_rows r
+      left join lateral (
+        select u.email as last_edited_by_email, a.created_at as last_edited_at
+        from audit_log a
+        left join app_users u on u.id = a.user_id
+        where a.entity_type = 'cpq_import_row'
+          and a.entity_id = r.id::text
+          and a.action_key = 'sku.manage.edit'
+        order by a.created_at desc
+        limit 1
+      ) edit_meta on true
+      where r.status = 'imported'
+        and coalesce(r.is_active, true) = true
+      order by r.digit_position, r.option_name, r.choice_value, r.id
+    `;
 
   const digitIssues = await getDigitIssues();
   return NextResponse.json({ rows, digitIssues });
