@@ -1,9 +1,10 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ChangeEvent } from 'react';
 import AdminPageShell from '@/components/admin/admin-page-shell';
 import { CPQ_COLUMNS } from '@/lib/cpq';
 import { safeReadJsonResponse } from '@/lib/http-json';
+import { rowMatchesMultiSelectFilters, toggleColumnVisibility } from '@/lib/admin-table-ui';
 
 type GeneratedRow = Record<string, string>;
 
@@ -43,6 +44,10 @@ function buildErrorMessage(payload: ApiPayload, fallback: string) {
   return firstRows ? `${rootMessage}. ${firstRows}` : rootMessage;
 }
 
+function selectedValues(event: ChangeEvent<HTMLSelectElement>) {
+  return Array.from(event.target.selectedOptions).map((option) => option.value);
+}
+
 export default function CpqFeatureClient() {
   const [file, setFile] = useState<File | null>(null);
   const [showWizard, setShowWizard] = useState(false);
@@ -52,10 +57,20 @@ export default function CpqFeatureClient() {
   const [rows, setRows] = useState<GeneratedRow[]>([]);
   const [picked, setPicked] = useState<Record<number, boolean>>({});
   const [status, setStatus] = useState('');
-  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [filters, setFilters] = useState<Record<string, string[]>>({});
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(CPQ_COLUMNS);
+  const [showFilters, setShowFilters] = useState(false);
+  const [showColumnManager, setShowColumnManager] = useState(false);
   const [wizard, setWizard] = useState({ selectedLine: 'C Line', electricType: 'Non electric', isSpecial: 'No', specialEditionName: '', character17: '', dryRun: false });
 
-  const filteredRows = useMemo(() => rows.filter((row) => Object.entries(filters).every(([key, value]) => !value || String(row[key] || '').toLowerCase().includes(value.toLowerCase()))), [rows, filters]);
+  const filterOptions = useMemo(() => {
+    return Object.fromEntries(CPQ_COLUMNS.map((column) => {
+      const values = Array.from(new Set(rows.map((row) => String(row[column] || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+      return [column, values];
+    }));
+  }, [rows]);
+
+  const filteredRows = useMemo(() => rows.filter((row) => rowMatchesMultiSelectFilters(row, filters)), [rows, filters]);
   const selectedCount = Object.values(picked).filter(Boolean).length;
 
   async function runImport() {
@@ -162,64 +177,86 @@ export default function CpqFeatureClient() {
   }
 
   return (
-    <AdminPageShell title="CPQ Feature" subtitle="Import CPQ CSV, update Bike SKU Definition, generate variations, and push selected rows to CPQ matrix.">
-      <div className="card" style={{ marginBottom: 12 }}>
-        <h3>Import CPQ CSV</h3>
-        <input type="file" accept=".csv,text/csv" onChange={(e) => setFile(e.target.files?.[0] || null)} />
-        <button className="primary" disabled={!file} onClick={() => setShowWizard(true)} style={{ marginLeft: 8 }}>Start import wizard</button>
+    <AdminPageShell title="CPQ Feature" subtitle="Import CPQ CSV, generate combinations, filter quickly, and push selected rows.">
+      <div className="cpqFeatureHeaderRow">
+        <div className="cpqFeatureFilePicker">
+          <input type="file" accept=".csv,text/csv" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+          <button className="primary" disabled={!file} onClick={() => setShowWizard(true)}>Import CSV</button>
+        </div>
+        <div className="summaryChips compactSummaryRow">
+          {summary ? (
+            <>
+              <span className="summaryChip">Rows read: {summary.rowsRead}</span>
+              <span className="summaryChip active">Imported: {summary.rowsImported}</span>
+              <span className="summaryChip">Skipped: {summary.rowsSkipped}</span>
+              <span className="summaryChip inactive">Duplicate skipped: {summary.duplicateRowsSkipped || 0}</span>
+            </>
+          ) : <span className="summaryChip">No import run yet</span>}
+        </div>
       </div>
 
-      {summary ? <div className="note">Rows read: {summary.rowsRead} · Imported: {summary.rowsImported} · Skipped: {summary.rowsSkipped} · Duplicate skipped: {summary.duplicateRowsSkipped || 0} · Unknown options: {summary.unknownOptionsSkipped || 0}</div> : null}
-      <div className="note">{status || 'Upload a file and run import.'}</div>
+      <div className="cpqFeatureToolbar toolbar compactToolbar">
+        <button onClick={() => setShowFilters((current) => !current)}>{showFilters ? 'Hide filters' : 'Show filters'}</button>
+        <button onClick={() => setShowColumnManager((current) => !current)}>{showColumnManager ? 'Hide columns' : 'Columns'}</button>
+        <button onClick={() => setPicked(Object.fromEntries(filteredRows.map((_, index) => [index, true])))}>Bulk select filtered</button>
+        <button onClick={() => setPicked({})}>Clear selection</button>
+        <button className="primary" onClick={pushRows}>Push selected</button>
+        <span className="subtle">Selected: {selectedCount} · Filtered: {filteredRows.length} / {rows.length}</span>
+      </div>
 
-      {debugData ? (
-        <div className="card" style={{ marginBottom: 12 }}>
-          <h3>Last import diagnostics</h3>
-          <div className="subtle">Run ID: {debugData.importRunId ?? 'n/a'} · Phase: {debugData.phase}</div>
-          <div>{debugData.message}</div>
-          {Array.isArray(debugData?.details?.errors) ? (
-            <ul>
-              {debugData.details.errors.slice(0, 10).map((error: any, index: number) => (
-                <li key={`${error.rowNumber}-${index}`}>Row {error.rowNumber}: {error.reason}</li>
-              ))}
-            </ul>
-          ) : null}
-          {Array.isArray(debugData?.summary?.rowIssues) ? (
-            <ul>
-              {debugData.summary.rowIssues.slice(0, 10).map((issue: any, index: number) => (
-                <li key={`${issue.rowNumber}-${index}`}>Row {issue.rowNumber}: {issue.reason}</li>
-              ))}
-            </ul>
-          ) : null}
+      {status ? <div className="note compactNote">{status}</div> : null}
+      {debugData ? <div className="note compactNote">Run {debugData.importRunId ?? 'n/a'} · {debugData.phase}: {debugData.message}</div> : null}
+
+      {showColumnManager ? (
+        <div className="card compactCard columnManagerCard">
+          <div className="filtersHeader">
+            <strong>Column visibility</strong>
+            <button onClick={() => setVisibleColumns(CPQ_COLUMNS)}>Reset columns</button>
+          </div>
+          <div className="columnToggleGrid">
+            {CPQ_COLUMNS.map((column) => (
+              <label key={column} className="choiceRow">
+                <input
+                  type="checkbox"
+                  checked={visibleColumns.includes(column)}
+                  onChange={(e) => setVisibleColumns((current) => toggleColumnVisibility(current, CPQ_COLUMNS, column, e.target.checked))}
+                />
+                {column}
+              </label>
+            ))}
+          </div>
         </div>
       ) : null}
 
-      <div className="toolbar">
-        <button onClick={() => setPicked(Object.fromEntries(filteredRows.map((_, index) => [index, true])))}>Bulk select filtered</button>
-        <button onClick={() => setPicked({})}>Clear selection</button>
-        <button className="primary" onClick={pushRows}>Push selected to new CPQ matrix</button>
-        <span className="subtle">Selected rows: {selectedCount}</span>
-      </div>
+      {showFilters ? (
+        <div className="card compactCard">
+          <div className="filtersHeader"><strong>Generated bike filters</strong><button onClick={() => setFilters({})}>Reset filters</button></div>
+          <div className="matrixFilterGrid featureFilterGrid">
+            {visibleColumns.map((column) => (
+              <label key={`filter-${column}`} className="filterLabel">
+                {column}
+                <select multiple className="multiSelect" value={filters[column] || []} onChange={(e) => setFilters((curr) => ({ ...curr, [column]: selectedValues(e) }))}>
+                  {(filterOptions[column] || []).map((value) => <option key={`${column}-${value}`} value={value}>{value}</option>)}
+                </select>
+              </label>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
-      <div className="tableWrap">
-        <table>
+      <div className="tableWrap cpqFeatureTableWrap">
+        <table className="cpqFeatureTable">
           <thead>
             <tr>
               <th>Pick</th>
-              {CPQ_COLUMNS.map((column) => <th key={column}>{column}</th>)}
-            </tr>
-            <tr className="filterRow">
-              <th />
-              {CPQ_COLUMNS.map((column) => (
-                <th key={`f-${column}`}><input placeholder="Filter" value={filters[column] || ''} onChange={(e) => setFilters((curr) => ({ ...curr, [column]: e.target.value }))} /></th>
-              ))}
+              {visibleColumns.map((column) => <th key={column}>{column}</th>)}
             </tr>
           </thead>
           <tbody>
             {filteredRows.map((row, index) => (
               <tr key={`${row['SKU code']}-${index}`}>
                 <td><input type="checkbox" checked={!!picked[index]} onChange={(e) => setPicked((curr) => ({ ...curr, [index]: e.target.checked }))} /></td>
-                {CPQ_COLUMNS.map((column) => <td key={`${column}-${index}`}>{row[column] || ''}</td>)}
+                {visibleColumns.map((column) => <td key={`${column}-${index}`}>{row[column] || ''}</td>)}
               </tr>
             ))}
           </tbody>
