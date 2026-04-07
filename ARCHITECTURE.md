@@ -1079,3 +1079,150 @@ Future work should preserve these principles:
 - explicit permissions
 - auditability
 - incremental changes
+
+---
+
+## CPQ Feature (Import CSV CPQ) — Detailed Flow
+
+### Feature flag
+- CPQ functionality is guarded behind the feature flag **`Import CSV CPQ`**.
+- The flag controls access to the **CPQ Feature** page and CPQ matrix workflows.
+
+### CPQ Feature page
+- Route: `app/cpq-feature/page.tsx` + `app/cpq-feature/page-client.tsx`.
+- User flow:
+  1. Upload CSV file.
+  2. Start import wizard.
+  3. Complete modal metadata questions.
+  4. Click **Confirm import**.
+  5. Server imports rules into `sku_rules` and logs each input row.
+  6. UI triggers CPQ generation from active SKU rules.
+  7. User filters/selects generated rows.
+  8. User pushes selected rows to CPQ matrix.
+
+### Modal questions before import
+The wizard collects metadata required by generation:
+- **Select a Line** (`C Line`, `P Line`, `T Line`, `G Line`, `A Line`)
+- **Electric type** (`Non electric`, `Electric`)
+- **Is it a special?** (`Yes`/`No`)
+- **Special edition name** (required when special = `Yes`)
+- **Character 17** (single `A-Z` or `0-9`)
+
+### CSV mapping (canonical import schema)
+The CPQ CSV import accepts these logical fields:
+- `Option name`
+- `Description`
+- `Digit`
+- `Value`
+
+Parser behaviour:
+- Supports header-row CSV and explicit header validation.
+- Trims header names and accepts minor spacing/format differences.
+- Supports delimiter `,` and `|`.
+- Skips header row when valid.
+- Returns a structured validation error payload if header is malformed.
+
+### Canonical option mapping layer
+Canonicalization is centralized in `lib/cpq.ts` (`mapCsvOptionNameToCanonical`).
+
+Rules:
+- Case-insensitive matching.
+- Trimming of input values.
+- Alias support in one place.
+- Used in parsing, validation, SKU-rule import, generated-product assembly, and CPQ push mapping.
+
+Examples covered:
+- `MudguardsAndRack`, `MudguardsandRack`, `Mudguards and Rack` => `MudguardsAndRack`
+- `SaddleBag` => `Saddlebag`
+
+### Duplicate handling rule
+Business rule for CPQ import:
+- Duplicate active `(digit_position, option_name, code_value)` rows are **skipped**.
+- Existing active rows are **not inactivated**.
+- Import **continues**.
+- Row is logged in `cpq_import_rows` with reason `Duplicate digit/value skipped`.
+
+### Digit 0 handling
+Digit 0 rows represent static/default attributes:
+- Treated as valid CPQ import rows.
+- `Value` must be `-` for digit `0`.
+- `Description` is the meaningful value saved to `choice_value` and propagated to generated CPQ rows.
+- Applied to generated products via static attribute injection before non-static combinations are expanded.
+
+### Bike SKU Definition update behaviour
+On successful import:
+- New rule rows are inserted into `sku_rules`.
+- Rule insertions are active (`is_active = true`).
+- Per-row outcomes are persisted in `cpq_import_rows`.
+- Run-level totals are persisted in `cpq_import_runs`.
+
+### Audit / diagnostics behaviour
+Import responses return structured JSON:
+- `summary.rowsRead`
+- `summary.rowsImported`
+- `summary.rowsSkipped`
+- `summary.duplicateRowsSkipped`
+- `summary.unknownOptionsSkipped`
+- `summary.rowIssues[]` (row number + reason)
+
+Endpoint error model:
+- Validation errors => `400` JSON with `message` + `details`.
+- Unexpected errors => `500` JSON with `message` + `details.error`.
+- Frontend consumes safely without assuming JSON parse success.
+
+### CPQ product generation
+Generation endpoint: `GET /api/cpq/generate?run_id=<id>`
+
+Generation model:
+- Load active `sku_rules`.
+- Partition digit `0` (static) vs non-static rows.
+- Build Cartesian product across non-static option groups.
+- Build SKU string from digit positions.
+- Force character-17 position from wizard metadata.
+- Populate CPQ output columns (`CPQ_COLUMNS`) and static attributes.
+
+### Push to CPQ matrix
+Push endpoint: `POST /api/cpq/push`
+
+Behaviour:
+- Inserts full record into `cpq_products`.
+- Upserts logical rule row in `cpq_sku_rules` by `(sku_code, cpq_ruleset, brake_type)`.
+- Pre-seeds country availability in `cpq_availability` for all `cpq_countries`.
+- Handles canonical field aliases for rack and saddle bag keys.
+
+### CPQ tables used
+- `cpq_import_runs`
+- `cpq_import_rows`
+- `sku_rules`
+- `cpq_products`
+- `cpq_sku_rules`
+- `cpq_countries`
+- `cpq_availability`
+
+### CPQ matrix filtering
+The CPQ matrix page supports:
+- per-column filtering
+- edit/save workflows
+- brake-type compatibility validation against country brake type
+- duplicate active row prevention on save/upsert
+
+### BC status integration
+CPQ matrix rows track `bc_status` (`ok`/`nok`/blank) in `cpq_sku_rules`.
+- Status can be updated in bulk from matrix workflows.
+- CPQ BC checks update status while preserving row identity.
+
+### Differences vs legacy flow
+Current CPQ flow differs from legacy import behaviour by:
+- explicit header validation and skip logic
+- canonical mapping layer reuse across all stages
+- structured JSON response contract on success and failure
+- duplicate-skip semantics (non-fatal)
+- explicit digit-0 static-attribute pipeline
+- run/row diagnostics persisted and surfaced to UI
+
+### Known assumptions and constraints
+- CSV parsing is simple delimiter-based parsing with quote-trim support; complex escaped delimiters are not currently expanded.
+- Digit values are numeric and validated before DB writes.
+- Non-static rows require one-character alphanumeric code (`A-Z0-9`).
+- Digit-0 rows require `Value` as `-`.
+- Unknown option names are skipped (not fatal) and reported.

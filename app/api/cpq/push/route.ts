@@ -47,7 +47,7 @@ export async function POST(request: Request) {
         ${skuCode}, ${pick(row, 'Description')}, ${pick(row, 'HandlebarType')}, ${pick(row, 'Speeds')}, ${pick(row, 'MudguardsAndRack', 'MudguardsandRack')}, ${pick(row, 'Territory')},
         ${pick(row, 'MainFrameColour')}, ${pick(row, 'RearFrameColour')}, ${pick(row, 'FrontCarrierBlock')}, ${pick(row, 'Lighting')}, ${pick(row, 'SaddleHeight')},
         ${pick(row, 'GearRatio')}, ${pick(row, 'Saddle')}, ${pick(row, 'Tyre')}, ${pick(row, 'Brakes')}, ${pick(row, 'Pedals')},
-        ${pick(row, 'Saddlebag')}, ${pick(row, 'Suspension')}, ${pick(row, 'BikeType')}, ${pick(row, 'Toolkit')}, ${pick(row, 'SaddleLight')},
+        ${pick(row, 'Saddlebag', 'SaddleBag')}, ${pick(row, 'Suspension')}, ${pick(row, 'BikeType')}, ${pick(row, 'Toolkit')}, ${pick(row, 'SaddleLight')},
         ${pick(row, 'ConfigCode')}, ${pick(row, 'OptionBox')}, ${pick(row, 'FrameMaterial')}, ${pick(row, 'FrameSet')}, ${pick(row, 'ComponentColour')},
         ${pick(row, 'OnBikeAccessories')}, ${pick(row, 'HandlebarStemColour')}, ${pick(row, 'HandlebarPinColour')}, ${pick(row, 'FrontFrameColour')},
         ${pick(row, 'FrontForkColour')}, ${pick(row, 'Position29')}, ${pick(row, 'Position30')}, ${auth.user.id}

@@ -12,10 +12,25 @@ test('character 17 validation and normalization', () => {
 });
 
 test('csv parsing canonicalizes CPQ option names with aliases', () => {
-  const parsed = parseSimpleCsv('  mudguardsandrack  ,No rack,3,l\nHandlebarType,Mid,1,h');
-  assert.equal(parsed.length, 2);
-  assert.deepEqual(parsed[0], { rowNumber: 1, rawOptionName: 'mudguardsandrack', optionName: 'MudguardsAndRack', choiceValue: 'No rack', digitPosition: 3, codeValue: 'L' });
+  const parsed = parseSimpleCsv('  mudguardsandrack  ,No rack,3,l\nSaddleBag,None,15,0');
+  assert.equal(parsed.rows.length, 2);
+  assert.deepEqual(parsed.rows[0], { rowNumber: 1, rawOptionName: 'mudguardsandrack', optionName: 'MudguardsAndRack', choiceValue: 'No rack', digitPosition: 3, codeValue: 'L' });
+  assert.equal(parsed.rows[1].optionName, 'Saddlebag');
   assert.equal(mapCsvOptionNameToCanonical(' Mudguards And Rack '), 'MudguardsAndRack');
+});
+
+test('csv parsing supports and skips header rows with pipe delimiters', () => {
+  const parsed = parseSimpleCsv(' Option name | Description | Digit | Value\n ProductAssist | Non Electric | 0 | -\n HandlebarType | S-Type | 1 | S ');
+  assert.equal(parsed.diagnostics.headerDetected, true);
+  assert.equal(parsed.rows.length, 2);
+  assert.equal(parsed.rows[0].optionName, 'ProductAssist');
+  assert.equal(parsed.rows[1].digitPosition, 1);
+});
+
+test('csv parser reports invalid header as validation error', () => {
+  const parsed = parseSimpleCsv(' Option | Description | Digit | Value\n ProductAssist | Non Electric | 0 | -');
+  assert.ok(parsed.diagnostics.validationErrors.length >= 1);
+  assert.ok(parsed.diagnostics.validationErrors.some((error) => /Invalid header row/.test(error.reason)));
 });
 
 test('digit 0 static CPQ attributes are included in generated rows', () => {

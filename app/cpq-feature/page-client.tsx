@@ -3,8 +3,28 @@
 import { useMemo, useState } from 'react';
 import AdminPageShell from '@/components/admin/admin-page-shell';
 import { CPQ_COLUMNS } from '@/lib/cpq';
+import { safeReadJsonResponse } from '@/lib/http-json';
 
 type GeneratedRow = Record<string, string>;
+
+type ApiPayload = {
+  ok?: boolean;
+  error?: string;
+  message?: string;
+  details?: any;
+  runId?: number;
+  summary?: any;
+  rows?: GeneratedRow[];
+  pushed?: number;
+};
+
+function buildErrorMessage(payload: ApiPayload, fallback: string) {
+  const details = payload?.details;
+  const rowErrors = Array.isArray(details?.errors) ? details.errors : Array.isArray(payload?.summary?.rowIssues) ? payload.summary.rowIssues : [];
+  const firstRows = rowErrors.slice(0, 5).map((err: any) => `Row ${err.rowNumber}: ${err.reason}`).join(' | ');
+  const rootMessage = payload?.message || payload?.error || fallback;
+  return firstRows ? `${rootMessage}. ${firstRows}` : rootMessage;
+}
 
 export default function CpqFeatureClient() {
   const [file, setFile] = useState<File | null>(null);
@@ -31,18 +51,24 @@ export default function CpqFeatureClient() {
     form.append('character17', wizard.character17);
 
     const res = await fetch('/api/cpq/import', { method: 'POST', body: form });
-    const payload = await res.json();
-    if (!res.ok) {
-      setStatus(payload.error || 'Import failed');
+    const payload = await safeReadJsonResponse(res) as ApiPayload;
+    if (!res.ok || !payload.runId) {
+      setStatus(buildErrorMessage(payload, 'Import failed'));
       return;
     }
+
     setRunId(payload.runId);
     setSummary(payload.summary);
     setStatus('Import successful. Generating combinations...');
     setShowWizard(false);
 
     const genRes = await fetch(`/api/cpq/generate?run_id=${payload.runId}`);
-    const genPayload = await genRes.json();
+    const genPayload = await safeReadJsonResponse(genRes) as ApiPayload;
+    if (!genRes.ok) {
+      setStatus(buildErrorMessage(genPayload, 'Import succeeded but generation failed'));
+      return;
+    }
+
     setRows(genPayload.rows || []);
     setPicked({});
     setStatus(`Generated ${genPayload.rows?.length || 0} CPQ variation(s).`);
@@ -62,8 +88,13 @@ export default function CpqFeatureClient() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ runId, brakeMode: mode, rows: selected })
     });
-    const payload = await res.json();
-    setStatus(res.ok ? `Pushed ${payload.pushed} row(s) to CPQ matrix.` : payload.error || 'Push failed');
+    const payload = await safeReadJsonResponse(res) as ApiPayload;
+    if (!res.ok) {
+      setStatus(buildErrorMessage(payload, 'Push failed'));
+      return;
+    }
+
+    setStatus(`Pushed ${payload.pushed || 0} row(s) to CPQ matrix.`);
   }
 
   return (
@@ -74,7 +105,7 @@ export default function CpqFeatureClient() {
         <button className="primary" disabled={!file} onClick={() => setShowWizard(true)} style={{ marginLeft: 8 }}>Start import wizard</button>
       </div>
 
-      {summary ? <div className="note">Rows read: {summary.rowsRead} · Imported: {summary.rowsImported} · Skipped: {summary.rowsSkipped} · Deactivated: {summary.rowsDeactivated} · Inserted: {summary.rowsInserted}</div> : null}
+      {summary ? <div className="note">Rows read: {summary.rowsRead} · Imported: {summary.rowsImported} · Skipped: {summary.rowsSkipped} · Duplicate skipped: {summary.duplicateRowsSkipped || 0} · Unknown options: {summary.unknownOptionsSkipped || 0}</div> : null}
       <div className="note">{status || 'Upload a file and run import.'}</div>
 
       <div className="toolbar">
