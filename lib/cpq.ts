@@ -74,6 +74,14 @@ export type CpqMetadata = {
   fileName: string;
 };
 
+export type GenerationDiagnostics = {
+  activeRowsConsidered: number;
+  staticOptionsCount: number;
+  digitGroups: Array<{ digitPosition: number; optionName: string; codeValues: string[] }>;
+  skippedRows: Array<{ ruleId: number; reason: string; digitPosition: number; codeValue: string; optionName: string }>;
+  combinationsProduced: number;
+};
+
 export type ParsedCsvRow = {
   rowNumber: number;
   rawOptionName: string;
@@ -200,44 +208,97 @@ export function parseSimpleCsv(content: string): ParsedCpqCsv {
   };
 }
 
-export function buildCpqCombinations(rules: SkuRule[], metadata: CpqMetadata) {
+export function buildCpqCombinationsDetailed(rules: SkuRule[], metadata: CpqMetadata): { rows: Array<Record<string, string>>; diagnostics: GenerationDiagnostics } {
+  const diagnostics: GenerationDiagnostics = {
+    activeRowsConsidered: rules.length,
+    staticOptionsCount: 0,
+    digitGroups: [],
+    skippedRows: [],
+    combinationsProduced: 0
+  };
+
+  const latestByStructuralKey = new Map<string, SkuRule>();
+  for (const rule of rules) {
+    const canonicalOption = mapCsvOptionNameToCanonical(rule.option_name) || rule.option_name;
+    const structuralKey = Number(rule.digit_position) === 0
+      ? `0|${canonicalOption.toLowerCase()}|${String(rule.code_value || '-').toUpperCase()}`
+      : `${Number(rule.digit_position)}|${String(rule.code_value || '').toUpperCase()}`;
+    const current = latestByStructuralKey.get(structuralKey);
+    if (!current || Number(rule.id) > Number(current.id)) {
+      latestByStructuralKey.set(structuralKey, { ...rule, option_name: canonicalOption });
+    }
+  }
+
+  const normalizedRules = Array.from(latestByStructuralKey.values()).sort((a, b) => Number(a.digit_position) - Number(b.digit_position) || Number(a.id) - Number(b.id));
   const staticAttributes = new Map<string, string>();
-  const nonStaticRules = rules.filter((rule) => {
+  const nonStaticRules = normalizedRules.filter((rule) => {
     if (Number(rule.digit_position) !== 0) return true;
     const canonicalOption = mapCsvOptionNameToCanonical(rule.option_name) || rule.option_name;
     if (!staticAttributes.has(canonicalOption)) staticAttributes.set(canonicalOption, rule.choice_value);
     return false;
   });
+  diagnostics.staticOptionsCount = staticAttributes.size;
 
-  const grouped = new Map<string, SkuRule[]>();
+  const grouped = new Map<number, SkuRule[]>();
   nonStaticRules.forEach((rule) => {
-    const canonicalOption = mapCsvOptionNameToCanonical(rule.option_name) || rule.option_name;
-    const existing = grouped.get(canonicalOption) || [];
-    existing.push({ ...rule, option_name: canonicalOption });
-    grouped.set(canonicalOption, existing);
+    const digit = Number(rule.digit_position);
+    const existing = grouped.get(digit) || [];
+    const duplicateCode = existing.find((row) => String(row.code_value).toUpperCase() === String(rule.code_value).toUpperCase());
+    if (duplicateCode) {
+      diagnostics.skippedRows.push({
+        ruleId: Number(rule.id),
+        reason: 'duplicate_digit_code_in_scope',
+        digitPosition: digit,
+        codeValue: String(rule.code_value || '').toUpperCase(),
+        optionName: rule.option_name
+      });
+      return;
+    }
+    existing.push(rule);
+    grouped.set(digit, existing);
   });
 
-  const optionNames = Array.from(grouped.keys()).sort((a, b) => {
-    const aDigit = Math.min(...(grouped.get(a) || []).map((r) => r.digit_position));
-    const bDigit = Math.min(...(grouped.get(b) || []).map((r) => r.digit_position));
-    return aDigit - bDigit;
+  const digits = Array.from(grouped.keys()).sort((a, b) => a - b);
+  diagnostics.digitGroups = digits.map((digitPosition) => {
+    const rowsForDigit = grouped.get(digitPosition) || [];
+    return {
+      digitPosition,
+      optionName: rowsForDigit[0]?.option_name || '',
+      codeValues: rowsForDigit.map((row) => String(row.code_value || '').toUpperCase()).sort()
+    };
   });
 
-  let combinations: Array<Record<string, string>> = [{}];
-  optionNames.forEach((optionName) => {
-    const next: Array<Record<string, string>> = [];
-    const values = (grouped.get(optionName) || []).map((rule) => rule.choice_value);
-    combinations.forEach((base) => values.forEach((value) => next.push({ ...base, [optionName]: value })));
+  let combinations: Array<{ byOption: Record<string, string>; byDigitCode: Record<number, string> }> = [{ byOption: {}, byDigitCode: {} }];
+  digits.forEach((digit) => {
+    const next: Array<{ byOption: Record<string, string>; byDigitCode: Record<number, string> }> = [];
+    const rowsForDigit = grouped.get(digit) || [];
+    if (!rowsForDigit.length) {
+      diagnostics.skippedRows.push({
+        ruleId: 0,
+        reason: 'digit_group_missing_rows',
+        digitPosition: digit,
+        codeValue: '',
+        optionName: ''
+      });
+      return;
+    }
+    combinations.forEach((base) => rowsForDigit.forEach((rule) => {
+      const optionName = mapCsvOptionNameToCanonical(rule.option_name) || rule.option_name;
+      next.push({
+        byOption: { ...base.byOption, [optionName]: rule.choice_value },
+        byDigitCode: { ...base.byDigitCode, [digit]: String(rule.code_value || '').toUpperCase() }
+      });
+    }));
     combinations = next;
   });
 
-  if (!combinations.length) combinations = [{}];
+  if (!combinations.length) combinations = [{ byOption: {}, byDigitCode: {} }];
 
-  return combinations.map((combo) => {
+  const rows = combinations.map((combo) => {
     const chars = Array(30).fill('_');
-    nonStaticRules.forEach((rule) => {
-      const canonicalOption = mapCsvOptionNameToCanonical(rule.option_name) || rule.option_name;
-      if (combo[canonicalOption] === rule.choice_value) chars[rule.digit_position - 1] = rule.code_value;
+    Object.entries(combo.byDigitCode).forEach(([digit, code]) => {
+      const digitPosition = Number(digit);
+      if (digitPosition > 0) chars[digitPosition - 1] = code;
     });
     chars[16] = normalizeCharacter17(metadata.character17);
     const sku = chars.join('').replace(/_+$/g, '') || '_';
@@ -255,7 +316,7 @@ export function buildCpqCombinations(rules: SkuRule[], metadata: CpqMetadata) {
       if (CPQ_COLUMNS.includes(optionName)) row[optionName] = choiceValue;
     }
 
-    Object.entries(combo).forEach(([option, choice]) => {
+    Object.entries(combo.byOption).forEach(([option, choice]) => {
       if (CPQ_COLUMNS.includes(option)) row[option] = choice;
     });
 
@@ -263,4 +324,10 @@ export function buildCpqCombinations(rules: SkuRule[], metadata: CpqMetadata) {
 
     return row;
   });
+  diagnostics.combinationsProduced = rows.length;
+  return { rows, diagnostics };
+}
+
+export function buildCpqCombinations(rules: SkuRule[], metadata: CpqMetadata) {
+  return buildCpqCombinationsDetailed(rules, metadata).rows;
 }

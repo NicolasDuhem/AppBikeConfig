@@ -149,3 +149,11 @@ Then manually test:
    - Builder push
    - Users page
 4. Verify forbidden API calls return 403 for missing roles.
+
+## CPQ import generation behavior
+
+- Generation structure uses `digit_position + code_value` as the canonical key (`option_name + code_value` for digit `0` static attributes).
+- Description/choice text is display-only and does not determine structural validity.
+- Confirm import generation is scoped to the current `cpq_import_runs.id` via `cpq_import_rows`, preventing mixed historical rules across unrelated uploads.
+- Latest active display value per structural key is selected using newest active `sku_rules.id` (because `sku_rules` currently has no `updated_at`/`created_at` columns).
+- Generation route always resolves with JSON success/error and updates `cpq_import_runs.current_phase` (`generating_combinations`, `generation_completed`, `generation_failed`) for diagnostics.
