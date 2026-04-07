@@ -17,6 +17,7 @@ type ApiPayload = {
   importRunId?: number;
   phase?: string;
   summary?: any;
+  diagnostics?: any;
   rows?: GeneratedRow[];
   pushed?: number;
   dryRun?: boolean;
@@ -94,16 +95,41 @@ export default function CpqFeatureClient() {
     setStatus('Import successful. Generating combinations...');
     setShowWizard(false);
 
-    const genRes = await fetch(`/api/cpq/generate?run_id=${returnedRunId}`);
-    const genPayload = await safeReadJsonResponse(genRes) as ApiPayload;
-    if (!genRes.ok) {
-      setStatus(buildErrorMessage(genPayload, 'Import succeeded but generation failed'));
-      return;
-    }
+    try {
+      const genRes = await fetch(`/api/cpq/generate?run_id=${returnedRunId}`);
+      const genPayload = await safeReadJsonResponse(genRes) as ApiPayload;
+      if (!genRes.ok) {
+        setDebugData({
+          importRunId: returnedRunId,
+          phase: genPayload.phase || 'generation_failed',
+          message: genPayload.message || genPayload.error || 'Generation failed',
+          details: genPayload.details,
+          summary: genPayload.summary || { diagnostics: genPayload.details || null }
+        });
+        setStatus(buildErrorMessage(genPayload, 'Import succeeded but generation failed'));
+        return;
+      }
 
-    setRows(genPayload.rows || []);
-    setPicked({});
-    setStatus(`Generated ${genPayload.rows?.length || 0} CPQ variation(s).`);
+      setRows(genPayload.rows || []);
+      setPicked({});
+      setDebugData({
+        importRunId: returnedRunId,
+        phase: genPayload.phase || 'generation_completed',
+        message: `Generation completed (${genPayload.rows?.length || 0} rows).`,
+        details: genPayload.details || genPayload.diagnostics,
+        summary: genPayload.summary
+      });
+      setStatus(`Generated ${genPayload.rows?.length || 0} CPQ variation(s).`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Network error during generation';
+      setDebugData({
+        importRunId: returnedRunId,
+        phase: 'generation_failed',
+        message,
+        details: { error: message }
+      });
+      setStatus(`Import succeeded but generation request failed: ${message}`);
+    }
   }
 
   async function pushRows() {

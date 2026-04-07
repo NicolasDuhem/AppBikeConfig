@@ -51,3 +51,21 @@ test('digit 0 static CPQ attributes are included in generated rows', () => {
   assert.equal(rows[0].MudguardsAndRack, '');
   assert.equal(rows[0]['SKU code'][16], 'B');
 });
+
+test('generation is keyed by digit + code and does not depend on historical description labels', () => {
+  const rules: SkuRule[] = [
+    { id: 10, digit_position: 3, option_name: 'MudguardsAndRack', code_value: 'R', choice_value: 'Rack', description_element: 'Rack', is_active: true, deactivated_at: null, deactivation_reason: null },
+    { id: 11, digit_position: 3, option_name: 'MudguardsAndRack', code_value: 'N', choice_value: 'No rack', description_element: 'No rack', is_active: true, deactivated_at: null, deactivation_reason: null },
+    { id: 12, digit_position: 3, option_name: 'MudguardsAndRack', code_value: 'R', choice_value: 'G line Rack', description_element: 'G line Rack', is_active: true, deactivated_at: null, deactivation_reason: null }
+  ];
+
+  const rows = buildCpqCombinations(rules, {
+    selectedLine: 'G Line', electricType: 'Non electric', isSpecial: false, character17: 'A', fileName: 'ruleset-a.csv'
+  });
+
+  assert.equal(rows.length, 2);
+  assert.ok(rows.some((row) => row.MudguardsAndRack === 'G line Rack'));
+  assert.ok(rows.some((row) => row.MudguardsAndRack === 'No rack'));
+  assert.ok(rows.some((row) => row['SKU code'][2] === 'R'));
+  assert.ok(rows.some((row) => row['SKU code'][2] === 'N'));
+});
