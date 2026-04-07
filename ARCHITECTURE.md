@@ -1,108 +1,116 @@
 # AppBikeConfig Architecture
 
-## 1) Canonical CPQ data model
+## 1) Architectural baseline
 
-### 1.1 Single source for Product - SKU definition
-`cpq_import_rows` is now the **only** canonical source for Product ↔ SKU definition values and wording.
+AppBikeConfig currently runs as a **dual-track architecture**:
 
-`sku_rules` is deprecated and not used by active application logic.
+1. **CPQ canonical track (primary direction):**
+   - Canonical SKU definition rows in `cpq_import_rows`.
+   - Normalized generated product attributes through `cpq_product_attributes`.
+   - CPQ sales matrix in `cpq_sku_rules` + `cpq_availability` + `cpq_countries`.
 
-Canonical row lifecycle fields on `cpq_import_rows`:
-- `is_active`
-- `deactivated_at`
-- `deactivation_reason`
-- `updated_at`
-- `updated_by`
-- `source`
+2. **Legacy compatibility track (feature-flag fallback):**
+   - Legacy matrix tables `products`, `countries`, `availability`.
+   - Legacy builder endpoint `/api/builder-push`.
 
-### 1.2 Normalized product references
-- `cpq_products` = product identity + SKU code.
-- `cpq_product_attributes` = product-to-canonical reference bridge (`cpq_import_row_id`).
-- `cpq_products_flat` = read compatibility layer/view for downstream display.
-
-This keeps wording normalized: if a canonical row wording changes, all consumers that resolve via `cpq_product_attributes -> cpq_import_rows` update automatically.
+The runtime switch is primarily `feature_flags.import_csv_cpq` (public feature flag endpoint consumed by nav/pages).
 
 ---
 
-## 2) Page/data-flow mapping
+## 2) Core domains and ownership
 
-### 2.1 Product - SKU definition
-- API: `app/api/sku-rules/route.ts`.
-- Reads from `cpq_import_rows where status='imported'`.
-- Add/Edit/Inactivate/Reactivate/Delete act directly on canonical `cpq_import_rows`.
-- Delete is blocked if `cpq_product_attributes` references the row.
+## 2.1 Identity and authorization
+- Auth provider: credentials against `app_users`.
+- RBAC model: `roles`, `user_roles`, `permissions`, `role_permissions`, `user_permissions`.
+- Effective permission resolution merges role baseline + user overrides.
+- Audit trail for operational writes stored in `audit_log`.
 
-### 2.2 Product - Create SKU
-- Option source: `GET /api/cpq/options` reads active canonical rows from `cpq_import_rows`.
-- Generator: `GET /api/cpq/generate` resolves active canonical scope from `cpq_import_rows`.
-- Push: persists normalized references into `cpq_product_attributes` using canonical `cpq_import_row_id`.
+## 2.2 CPQ canonical data model
 
-### 2.3 Sales - SKU vs Country
-Sales matrix continues to read generated products; wording consistency is preserved through normalized references in `cpq_products_flat`/`cpq_product_attributes`.
+### Canonical definition source
+- `cpq_import_rows` is the operational source for Product - SKU definition and Product - Create SKU option generation.
+- Active lifecycle fields: `is_active`, `deactivated_at`, `deactivation_reason`, `updated_at`, `updated_by`, `source`.
 
-### 2.4 Product - Setup
-`/api/product-setup` now discovers available digits from active canonical `cpq_import_rows`, not `sku_rules`.
+### Normalized generated products
+- `cpq_products` stores product identity (`id`, `sku_code`, run/ruleset context).
+- `cpq_product_attributes` stores option references (`option_name` -> `cpq_import_row_id`).
+- `cpq_products_flat` is a compatibility/read view that resolves attribute text values from normalized references (with fallback to old `cpq_products` text columns).
 
----
+### Sales matrix (CPQ)
+- `cpq_sku_rules` stores sellable rows scoped by `(sku_code, cpq_ruleset, brake_type)` and includes `bc_status`.
+- `cpq_availability` stores country enablement.
+- `cpq_countries` stores country + region + brake orientation.
+- Optional media layer: `cpq_product_assets` (feature-flagged picture picker path).
 
-## 3) RBAC model and standard role base management
+## 2.3 Configuration domains
+- `sku_digit_option_config`: required/multi-single behavior for each digit.
+- `sku_generation_dependency_rules`: currently match-code dependency constraints between digits.
 
-### 3.1 RBAC tables
-- `roles`
-- `user_roles`
-- `permissions`
-- `role_permissions` (baseline role-to-permission mapping)
-- `user_permissions` (per-user allow/deny override)
-
-### 3.2 New baseline management capability
-Sys admins can now manage the standard role base mapping from Admin - Users via `app/api/role-permissions/route.ts`:
-- `GET`: list role baseline grants.
-- `PATCH`: replace baseline permissions for a role.
-
-Baseline changes are audited in:
-- `role_permission_baselines_audit`
+## 2.4 Feature management
+- `feature_flags` runtime gating.
+- `feature_flag_audit` change log.
 
 ---
 
-## 4) Migration and backfill strategy
+## 3) Runtime process architecture
 
-Migration file: `sql/013_cpq_import_rows_canonical_and_role_baseline.sql`
+## 3.1 Product - SKU definition
+- UI: `/sku-definition`
+- API: `/api/sku-rules`
+- Reads/writes canonical rows directly in `cpq_import_rows`.
+- Delete protection checks `cpq_product_attributes` references.
 
-What it does:
-1. Adds canonical lifecycle fields to `cpq_import_rows`.
-2. Backfills missing canonical rows from legacy `sku_rules` (without duplicates).
-3. Auto-deactivates duplicate active canonical structural keys.
-4. Adds unique/index guards for active structural keys.
-5. Adds `role_permission_baselines_audit` table.
+## 3.2 Product - Setup
+- UI: `/setup`
+- API: `/api/product-setup`
+- Maintains generation metadata tables (`sku_digit_option_config`, `sku_generation_dependency_rules`).
 
-Structural uniqueness is enforced on active canonical keys by:
-- `digit_position`
-- `option_name`
-- `code_value`
+## 3.3 Product - Create SKU
+- UI: `/cpq-feature`
+- APIs:
+  - `/api/cpq/options` (hydrate active canonical options)
+  - `/api/cpq/generate` (compose combinations)
+  - `/api/cpq/push` (persist generated rows to CPQ matrix path)
+
+## 3.4 Sales - SKU vs Country
+- UI: `/cpq-matrix` (when CPQ flag ON) or `/matrix` (legacy fallback).
+- CPQ APIs under `/api/cpq-matrix/*` perform single save, batch save, bulk country toggle, BC status checks, and picture attachment.
+
+## 3.5 Admin - Users / permissions baseline
+- UI: `/users`
+- APIs:
+  - `/api/users`, `/api/roles`, `/api/permissions`
+  - `/api/role-permissions` for standard role baseline management
+- Baseline changes append `role_permission_baselines_audit`.
 
 ---
 
-## 5) UI/layout principles (compact desktop admin)
+## 4) Constraints relied on by architecture
 
-Applied across Product - SKU definition, Product - Create SKU, Product - Setup, and Admin - Users:
-- compact toolbar/card spacing
-- table-first layout
-- internal table scroll containers (`.tableWrap`) with bounded heights
-- avoid forcing full-page vertical scrolling for operational grids
-
-Product - Setup now explicitly uses bounded table containers to keep dependency/config tables internally scrollable in realistic desktop viewport sizes.
+- Active canonical uniqueness on `cpq_import_rows` structural key.
+- Active CPQ matrix uniqueness on `cpq_sku_rules` (`sku_code`, `cpq_ruleset`, `brake_type`).
+- Composite PKs on availability tables for idempotent upsert.
+- RBAC FKs for permission integrity.
+- DB check constraints for brake types, bc status, digit bounds, dependency rule types.
 
 ---
 
-## 6) Acceptance-state architecture
+## 5) Known compatibility/legacy surfaces
 
-### Active architecture
-- `cpq_import_rows` (canonical source values/IDs)
-- `cpq_product_attributes` (product ↔ canonical reference bridge)
-- `cpq_products` (product identity)
-- `cpq_products_flat` (compat/read view)
-- role/permission tables + baseline management API
-- setup/configuration tables (`sku_digit_option_config`, `sku_generation_dependency_rules`)
+1. `products`/`countries`/`availability` legacy matrix tables remain active in fallback mode.
+2. `sku_rules` remains legacy; canonical operational source is now `cpq_import_rows`.
+3. `cpq_import_runs` remains partially active for run-scoped generation diagnostics.
+4. `setup_options` route/table remains available but not central in current Product - Setup UX.
+5. `cpq_import_row_translations` exists but currently has no runtime path.
 
-### Deprecated from active logic
-- `sku_rules` as an operational source for Product - SKU definition or Product - Create SKU
+---
+
+## 6) Documentation governance (required)
+
+From now on, every project change that affects data behavior must update:
+
+- `DATABASE.md` → **data/schema knowledge** (tables, columns, constraints, status, cleanup candidates)
+- `PROCESSDATA.md` → **process/data-flow knowledge** (trigger, reads, writes, field updates, validations, outputs)
+
+This is mandatory for maintainability and safe deprecation planning.
+
