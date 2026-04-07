@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Country, MatrixRow } from '@/lib/types';
+import AdminPageShell from '@/components/admin/admin-page-shell';
 
 type MatrixClientRow = MatrixRow & { _clientKey: string };
 
@@ -302,8 +303,7 @@ export default function MatrixPage() {
   }
 
   return (
-    <div className="page">
-      <h2>Matrix</h2>
+    <AdminPageShell title="Matrix" subtitle="Manage matrix products, availability and BigCommerce validation.">
       <div className="note">Bulk actions apply to selected rows. If no rows are selected, they apply to all filtered rows.</div>
 
       <div className="matrixLayout">
@@ -506,6 +506,6 @@ export default function MatrixPage() {
           </div>
         </div>
       ) : null}
-    </div>
+    </AdminPageShell>
   );
 }

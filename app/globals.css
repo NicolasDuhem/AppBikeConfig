@@ -117,3 +117,6 @@ th { position:sticky; top:0; background:#f8faff; z-index:1; }
   .matrixFilters { position:static; max-height:none; }
   .modalGrid { grid-template-columns:1fr; }
 }
+
+.adminPage .pageHeader h2 { margin: 0 0 6px; }
+.adminContent { display: grid; gap: 12px; }

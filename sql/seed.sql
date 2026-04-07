@@ -26,3 +26,7 @@ select p.id, c.id, true
 from products p cross join countries c
 where p.sku_code = '24_R'
 on conflict (product_id, country_id) do update set available = excluded.available;
+
+insert into feature_flags (flag_key, flag_name, description, enabled)
+values ('import_csv_cpq','Import CSV CPQ','Enables CPQ CSV import flow and CPQ product generation workflow.',false)
+on conflict (flag_key) do update set flag_name = excluded.flag_name, description = excluded.description;
