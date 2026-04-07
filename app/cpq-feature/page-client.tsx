@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import AdminPageShell from '@/components/admin/admin-page-shell';
-import { CPQ_COLUMNS } from '@/lib/cpq';
+import { CPQ_COLUMNS } from '@/lib/cpq-core';
 import { safeReadJsonResponse } from '@/lib/http-json';
 import { rowMatchesMultiSelectFilters, toggleColumnVisibility } from '@/lib/admin-table-ui';
 

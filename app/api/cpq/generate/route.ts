@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireApiRole } from '@/lib/api-auth';
 import { sql } from '@/lib/db';
-import { buildCpqCombinationsDetailed, CPQ_COLUMNS, mapCsvOptionNameToCanonical, normalizeCharacter17 } from '@/lib/cpq';
+import { buildCpqCombinationsDetailed, CPQ_COLUMNS, mapOptionNameToCanonical, normalizeCharacter17 } from '@/lib/cpq-core';
 import type { SkuRule } from '@/lib/types';
 
 type SelectedDigitChoice = {
@@ -29,7 +29,7 @@ function buildRowsFromSelectedChoices(payload: any) {
   for (const rawChoice of selectedChoices) {
     const digitPosition = Number(rawChoice.digitPosition);
     if (!digitPosition || digitPosition < 1 || digitPosition > 30) continue;
-    const optionName = mapCsvOptionNameToCanonical(String(rawChoice.optionName || '').trim()) || String(rawChoice.optionName || '').trim();
+    const optionName = mapOptionNameToCanonical(String(rawChoice.optionName || '').trim()) || String(rawChoice.optionName || '').trim();
     const choice: SelectedDigitChoice = {
       digitPosition,
       optionName,
@@ -147,10 +147,10 @@ export async function GET(request: Request) {
     ` as Array<{ row_number: number; digit_position: number; option_name: string; code_value: string; status: string; action_attempted: string | null }>;
 
     if (!importRows.length) {
-      return NextResponse.json({ success: false, phase: 'generation_validation', error: 'No valid rows from uploaded CSV were available for generation' }, { status: 400 });
+      return NextResponse.json({ success: false, phase: 'generation_validation', error: 'No valid normalized rows were available for generation' }, { status: 400 });
     }
 
-    const scopedKeySet = new Set(importRows.map((row) => `${Number(row.digit_position)}|${String(row.code_value || (Number(row.digit_position) === 0 ? '-' : '')).toUpperCase()}|${String(mapCsvOptionNameToCanonical(row.option_name) || row.option_name).toLowerCase()}`));
+    const scopedKeySet = new Set(importRows.map((row) => `${Number(row.digit_position)}|${String(row.code_value || (Number(row.digit_position) === 0 ? '-' : '')).toUpperCase()}|${String(mapOptionNameToCanonical(row.option_name) || row.option_name).toLowerCase()}`));
     const activeRules = await sql`
       select id, digit_position, option_name, code_value, choice_value, description_element, is_active, deactivated_at, deactivation_reason
       from sku_rules
@@ -160,7 +160,7 @@ export async function GET(request: Request) {
 
     const scopedRulesByKey = new Map<string, SkuRule>();
     for (const rule of activeRules) {
-      const canonicalOption = mapCsvOptionNameToCanonical(rule.option_name) || rule.option_name;
+      const canonicalOption = mapOptionNameToCanonical(rule.option_name) || rule.option_name;
       const scopedKey = `${Number(rule.digit_position)}|${String(rule.code_value || '').toUpperCase()}|${String(canonicalOption).toLowerCase()}`;
       if (!scopedKeySet.has(scopedKey)) continue;
       if (!scopedRulesByKey.has(scopedKey)) scopedRulesByKey.set(scopedKey, { ...rule, option_name: canonicalOption });
