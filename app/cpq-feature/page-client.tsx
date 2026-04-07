@@ -177,7 +177,7 @@ export default function CpqFeatureClient() {
   }
 
   return (
-    <AdminPageShell title="CPQ Feature" subtitle="Import CPQ CSV, generate combinations, filter quickly, and push selected rows.">
+    <AdminPageShell title="Product - Create SKU from CPQ file" subtitle="Import CPQ CSV, generate combinations, filter quickly, and push selected rows.">
       <div className="cpqFeatureHeaderRow">
         <div className="cpqFeatureFilePicker">
           <input type="file" accept=".csv,text/csv" onChange={(e) => setFile(e.target.files?.[0] || null)} />
@@ -204,11 +204,11 @@ export default function CpqFeatureClient() {
         <span className="subtle">Selected: {selectedCount} · Filtered: {filteredRows.length} / {rows.length}</span>
       </div>
 
-      {status ? <div className="note compactNote">{status}</div> : null}
-      {debugData ? <div className="note compactNote">Run {debugData.importRunId ?? 'n/a'} · {debugData.phase}: {debugData.message}</div> : null}
+      {status ? <div className="note compactNote compactSection">{status}</div> : null}
+      {debugData ? <div className="note compactNote compactSection">Run {debugData.importRunId ?? 'n/a'} · {debugData.phase}: {debugData.message}</div> : null}
 
       {showColumnManager ? (
-        <div className="card compactCard columnManagerCard">
+        <div className="card compactCard columnManagerCard compactSection">
           <div className="filtersHeader">
             <strong>Column visibility</strong>
             <button onClick={() => setVisibleColumns(CPQ_COLUMNS)}>Reset columns</button>
@@ -229,7 +229,7 @@ export default function CpqFeatureClient() {
       ) : null}
 
       {showFilters ? (
-        <div className="card compactCard">
+        <div className="card compactCard compactSection">
           <div className="filtersHeader"><strong>Generated bike filters</strong><button onClick={() => setFilters({})}>Reset filters</button></div>
           <div className="matrixFilterGrid featureFilterGrid">
             {visibleColumns.map((column) => (
@@ -244,8 +244,9 @@ export default function CpqFeatureClient() {
         </div>
       ) : null}
 
-      <div className="tableWrap cpqFeatureTableWrap">
-        <table className="cpqFeatureTable">
+      <div className="tableViewport">
+        <div className="tableWrap cpqFeatureTableWrap">
+          <table className="cpqFeatureTable">
           <thead>
             <tr>
               <th>Pick</th>
@@ -260,7 +261,8 @@ export default function CpqFeatureClient() {
               </tr>
             ))}
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
 
       {showWizard ? (

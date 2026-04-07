@@ -113,7 +113,7 @@ export default function SkuDefinitionPage() {
   };
 
   return (
-    <AdminPageShell title="Bike SKU Definition" subtitle="Manage SKU definition rules, lifecycle, and activation safety.">
+    <AdminPageShell title="Product - SKU definition" subtitle="Manage SKU definition rules, lifecycle, and activation safety.">
     <div className="skuPage">
       <div className="summaryChips compactSummaryRow" aria-label="Rules summary">
         <span className="summaryChip">Total rules: {statusSummary.total}</span>
@@ -193,22 +193,23 @@ export default function SkuDefinitionPage() {
         {knownDigitOptionName ? <div className="subtle">Digit {form.digit_position} already uses option “{knownDigitOptionName}”; option is locked.</div> : null}
       </div>
 
-      <div className="tableToolbar compactToolbar">
-        <input
-          placeholder="Search digit, option, code, choice, reason..."
-          value={filters.search}
-          onChange={(e) => updateFilter('search', e.target.value)}
-        />
-        <select value={filters.status} onChange={(e) => updateFilter('status', e.target.value as RuleFilters['status'])}>
-          <option value="all">All statuses</option>
-          <option value="active">Active only</option>
-          <option value="inactive">Inactive only</option>
-        </select>
-        <button onClick={resetFilters}>Reset filters</button>
-      </div>
+      <div className="tableViewport">
+        <div className="tableToolbar compactToolbar">
+          <input
+            placeholder="Search digit, option, code, choice, reason..."
+            value={filters.search}
+            onChange={(e) => updateFilter('search', e.target.value)}
+          />
+          <select value={filters.status} onChange={(e) => updateFilter('status', e.target.value as RuleFilters['status'])}>
+            <option value="all">All statuses</option>
+            <option value="active">Active only</option>
+            <option value="inactive">Inactive only</option>
+          </select>
+          <button onClick={resetFilters}>Reset filters</button>
+        </div>
 
-      <div className="tableWrap skuTableWrap">
-        <table>
+        <div className="tableWrap skuTableWrap">
+          <table>
           <thead>
             <tr>
               <th>Digit</th>
@@ -287,7 +288,8 @@ export default function SkuDefinitionPage() {
               </tr>
             ))}
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
 
       {pendingEdit ? (
@@ -343,4 +345,3 @@ export default function SkuDefinitionPage() {
     </AdminPageShell>
   );
 }
-

@@ -1,13 +1,14 @@
 # Admin UI Layout Pattern
 
-This document defines the shared compact admin/table layout used across CPQ Matrix, Bike SKU Definition, CPQ Feature, Users, and Feature Flags.
+This document defines the shared compact admin/table layout used across Sales - SKU vs Country, Product - SKU definition, Product - Create SKU from CPQ file, Admin - Users, and Admin - Feature flag.
 
 ## Desktop target and density
 
-- Primary optimization target is **1280x720 and larger**.
+- Primary optimization target is **desktop ~1920x1080 with browser chrome reducing usable height** (roughly ~900-940px usable vertical space).
 - Layout is table-first: page shells, toolbars, and status blocks are intentionally compact.
 - Table regions should get the largest portion of both width and height.
 - Avoid large hero cards and oversized helper banners above tables.
+- Prefer internal table-region scrolling over whole-page scrolling.
 
 ## Shared page-shell pattern
 
@@ -16,7 +17,7 @@ All admin pages should follow this structure:
 1. Compact page header (`AdminPageShell` title + subtitle).
 2. Compact action/toolbar row for operational controls.
 3. Optional collapsible filter panel/section.
-4. Dominant table area (`tableWrap`) with sticky header and high-height viewport.
+4. Dominant table area (`tableWrap`) in an internal viewport container (`tableViewport`) with sticky headers.
 5. Compact notes/chips for status and diagnostics.
 
 ## Global layout rules
@@ -25,6 +26,7 @@ All admin pages should follow this structure:
 - Keep navigation visible and active tab obvious.
 - Keep vertical rhythm tight (small gaps between sections).
 - Prefer chips/inline summaries over large stacked cards.
+- Keep admin pages in a fixed-height shell with compact Brompton header + compact navigation to maximize table rows.
 
 ## Show/Hide filters pattern
 
@@ -35,7 +37,7 @@ The standard table workflow now includes:
 - `Reset filters` available in toolbar and/or filter header.
 - Multi-select dropdown filters are preferred for categorical fields.
 
-## CPQ Matrix filter UX pattern
+## Sales - SKU vs Country filter UX pattern
 
 - Keep free-text search only for SKU search where text match is needed.
 - Use multi-select dropdown filters for business attributes, including:
@@ -45,7 +47,7 @@ The standard table workflow now includes:
   - CPQ attributes (ProductAssist, ProductFamily, ProductLine, ProductModel, ProductType, HandlebarType, Speeds, MudguardsAndRack, etc.)
 - When filters are hidden, matrix table expands to the full page width.
 
-## CPQ Feature compact import/status pattern
+## Product - Create SKU from CPQ file compact import/status pattern
 
 - Keep import controls in a compact top row (file picker + import action).
 - Render import diagnostics/status as compact notes/chips rather than large blocks.
@@ -54,12 +56,12 @@ The standard table workflow now includes:
 
 ## Column visibility controls
 
-- CPQ Feature includes a column visibility manager:
+- Product - Create SKU from CPQ file includes a column visibility manager:
   - Show/hide per column via checkbox list.
   - Reset to default visible set.
 - Reordering/resizing is not required yet; responsive width behavior is required and implemented.
 
-## Bike SKU Definition page guidance
+## Product - SKU definition page guidance
 
 - Keep add-rule form compact and directly above the table.
 - Keep search/status controls in a compact toolbar.

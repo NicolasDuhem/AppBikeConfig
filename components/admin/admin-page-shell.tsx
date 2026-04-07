@@ -8,8 +8,8 @@ export default function AdminPageShell({ title, subtitle, actions, children }: {
           <h2>{title}</h2>
           {subtitle ? <p className="subtle">{subtitle}</p> : null}
         </div>
+        {actions ? <div className="toolbar adminPageActions compactToolbar">{actions}</div> : null}
       </div>
-      {actions ? <div className="toolbar adminPageActions">{actions}</div> : null}
       <div className="adminContent">{children}</div>
     </div>
   );

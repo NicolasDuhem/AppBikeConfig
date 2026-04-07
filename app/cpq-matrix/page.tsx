@@ -226,7 +226,7 @@ export default function CpqMatrixPage() {
   const previewEnabled = canPreviewPicture(previewUrl);
 
   return (
-    <AdminPageShell title="CPQ Matrix" subtitle="Manage CPQ matrix products, brake-aware country availability, and BigCommerce validation.">
+    <AdminPageShell title="Sales - SKU vs Country" subtitle="Manage CPQ matrix products, brake-aware country availability, and BigCommerce validation.">
       <div className="matrixToolbar toolbar compactToolbar">
         <button onClick={() => setShowFilters((current) => !current)}>{showFilters ? 'Hide filters' : 'Show filters'}</button>
         <button onClick={() => setFilters(defaultFilters)}>Reset filters</button>
@@ -237,7 +237,7 @@ export default function CpqMatrixPage() {
         <button className="primary" disabled={isCheckingBc || !targetRows.length} onClick={checkBcStatus}>{isCheckingBc ? 'Checking BC…' : 'Check BC status'}</button>
         <span className="subtle">Scope: {selectedInFiltered.length ? `${selectedInFiltered.length} selected` : `${filteredRows.length} filtered`} / {rows.length} total</span>
       </div>
-      <div className={`matrixLayout ${showFilters ? '' : 'matrixLayoutExpanded'}`}>
+      <div className={`matrixLayout tableViewport ${showFilters ? '' : 'matrixLayoutExpanded'}`}>
         {showFilters ? (
           <aside className="matrixFilters">
             <div className="filtersHeader"><strong>Filters</strong><button onClick={() => setFilters(defaultFilters)}>Reset</button></div>
