@@ -121,3 +121,9 @@ th { position:sticky; top:0; background:#f8faff; z-index:1; }
 .adminPage .pageHeader h2 { margin: 0 0 6px; }
 .adminContent { display: grid; gap: 12px; }
 .countryBlocked { background:#eceff5; color:#6d7892; border-color:#c5cede; cursor:not-allowed; opacity:0.8; }
+.bdamModal { width:min(1100px, 95vw); }
+.bdamEmbedWrap { display:grid; gap:10px; }
+.bdamFrame { width:100%; height:420px; border:1px solid var(--line); border-radius:12px; background:#f8faff; }
+.bdamFallback { border:1px dashed #b5c5ea; border-radius:12px; padding:10px; background:#f5f8ff; display:grid; gap:8px; }
+.bdamPreview { margin-top:12px; border:1px solid var(--line); border-radius:12px; padding:10px; width:fit-content; max-width:100%; }
+.bdamPreview img { max-width:320px; max-height:220px; display:block; border-radius:8px; }

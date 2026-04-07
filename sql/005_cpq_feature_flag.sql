@@ -121,3 +121,14 @@ values (
 on conflict (flag_key) do update
 set flag_name = excluded.flag_name,
     description = excluded.description;
+
+insert into feature_flags (flag_key, flag_name, description, enabled)
+values (
+  'cpq_bdam_picture_picker',
+  'CPQ BDAM Picture Picker',
+  'Enables the BDAM iframe-based picture picker on CPQ Matrix items.',
+  false
+)
+on conflict (flag_key) do update
+set flag_name = excluded.flag_name,
+    description = excluded.description;

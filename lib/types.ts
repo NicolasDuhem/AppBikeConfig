@@ -87,4 +87,9 @@ export type CpqMatrixRow = MatrixRow & {
   handlebar_pin_colour?: string;
   front_frame_colour?: string;
   front_fork_colour?: string;
+  picture_asset_url?: string | null;
+  picture_png_url?: string | null;
+  picture_asset_id?: string | null;
+  picture_notes?: string | null;
+  picture_selected_at?: string | null;
 };
