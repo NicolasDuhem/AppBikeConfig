@@ -11,6 +11,14 @@ function pick(row: any, ...keys: string[]) {
   return '';
 }
 
+
+function pickReferenceRowId(row: any, optionName: string) {
+  const refs = row?.__refs;
+  if (!refs || typeof refs !== 'object') return null;
+  const value = refs[optionName];
+  const id = Number(value || 0);
+  return id > 0 ? id : null;
+}
 export async function POST(request: Request) {
   const auth = await requireApiRole('builder.push');
   if (auth instanceof NextResponse) return auth;
@@ -86,6 +94,10 @@ export async function POST(request: Request) {
       let importRowId = importRowIdCache.get(cacheKey);
 
       if (!importRowId) {
+        importRowId = pickReferenceRowId(row, attribute.optionName);
+      }
+
+      if (!importRowId) {
         const existingImportRow = await sql`
           select id
           from cpq_import_rows
@@ -141,14 +153,14 @@ export async function POST(request: Request) {
             if (fallbackImportRow.length) importRowId = Number(fallbackImportRow[0].id);
           }
         }
-
-        if (!importRowId) {
-          failedRows.push({ skuCode, cpqRuleset, reason: `Failed to resolve CPQ import row for ${attribute.optionName}` });
-          continue;
-        }
-
-        importRowIdCache.set(cacheKey, importRowId);
       }
+
+      if (!importRowId) {
+        failedRows.push({ skuCode, cpqRuleset, reason: `Failed to resolve CPQ import row for ${attribute.optionName}` });
+        continue;
+      }
+
+      importRowIdCache.set(cacheKey, importRowId);
 
       await sql`
         insert into cpq_product_attributes (cpq_product_id, option_name, cpq_import_row_id)

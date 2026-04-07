@@ -1,6 +1,6 @@
 # Admin UI Layout Pattern
 
-This document defines the shared compact admin/table layout used across Sales - SKU vs Country, Product - SKU definition, Product - Create SKU from CPQ file, Admin - Users, and Admin - Feature flag.
+This document defines the shared compact admin/table layout used across Sales - SKU vs Country, Product - SKU definition, Product - Create SKU, Admin - Users, and Admin - Feature flag.
 
 ## Desktop target and density
 
@@ -47,16 +47,16 @@ The standard table workflow now includes:
   - CPQ attributes (ProductAssist, ProductFamily, ProductLine, ProductModel, ProductType, HandlebarType, Speeds, MudguardsAndRack, etc.)
 - When filters are hidden, matrix table expands to the full page width.
 
-## Product - Create SKU from CPQ file compact import/status pattern
+## Product - Create SKU compact generation pattern
 
-- Keep import controls in a compact top row (file picker + import action).
-- Render import diagnostics/status as compact notes/chips rather than large blocks.
-- Use a compact operational toolbar for selection/push actions.
+- Keep product-level configuration controls in a compact top section (ruleset + single-select fields).
+- Render digit-based option multi-select controls in a compact section grouped by digit.
+- Use a compact operational toolbar for generate/selection/push actions.
 - Provide filter section and column manager as optional expandable sections.
 
 ## Column visibility controls
 
-- Product - Create SKU from CPQ file includes a column visibility manager:
+- Product - Create SKU includes a column visibility manager:
   - Show/hide per column via checkbox list.
   - Reset to default visible set.
 - Reordering/resizing is not required yet; responsive width behavior is required and implemented.
@@ -69,4 +69,4 @@ The standard table workflow now includes:
 
 ## Implementation note
 
-This UI redesign intentionally does **not** alter backend/API/business logic. Changes are limited to layout, spacing, table/filter usability, and admin UX density.
+This UI redesign keeps the normalized CPQ model while shifting Product - Create SKU to a DB-driven selection/generation flow.

@@ -21,7 +21,7 @@ export default function AppNavigation() {
           { href: cpqEnabled ? '/cpq-matrix' : '/matrix', label: cpqEnabled ? 'Sales - SKU vs Country' : 'Matrix' },
           { href: '/sku-definition', label: 'Product - SKU definition' },
           { href: '/bike-builder', label: 'Bike Builder', hidden: cpqEnabled },
-          { href: '/cpq-feature', label: 'Product - Create SKU from CPQ file', hidden: !cpqEnabled },
+          { href: '/cpq-feature', label: 'Product - Create SKU', hidden: !cpqEnabled },
           { href: '/users', label: 'Admin - Users' },
           { href: '/feature-flags', label: 'Admin - Feature flag', hidden: !roleList.includes('sys_admin') }
         ];
