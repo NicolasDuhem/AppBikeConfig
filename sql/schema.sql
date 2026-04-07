@@ -119,6 +119,15 @@ create table if not exists role_permissions (
   primary key (role_key, permission_id)
 );
 
+create table if not exists role_permission_baselines_audit (
+  id bigserial primary key,
+  role_key text not null references roles(role_key) on delete cascade,
+  permission_key text not null,
+  granted boolean not null,
+  changed_by bigint references app_users(id),
+  changed_at timestamptz not null default now()
+);
+
 create table if not exists user_permissions (
   user_id bigint not null references app_users(id) on delete cascade,
   permission_id bigint not null references permissions(id) on delete cascade,

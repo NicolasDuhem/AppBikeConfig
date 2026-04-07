@@ -59,7 +59,7 @@ export default function SetupPage() {
 
     <div className="card compactCard compactSection">
       <div className="filtersHeader"><strong>Digit option behavior</strong></div>
-      <div className="tableWrap">
+      <div className="tableWrap" style={{ maxHeight: 280 }}>
         <table>
           <thead><tr><th>Digit</th><th>Option</th><th>Required</th><th>Selection mode</th><th>Active</th></tr></thead>
           <tbody>
@@ -92,7 +92,7 @@ export default function SetupPage() {
       <div className="filtersHeader"><strong>Dependency rules (forced match)</strong>
         <button disabled={!canManage} onClick={() => setDependencyRules((curr) => [...curr, { source_digit_position: availableDigits[0]?.digit_position || 1, target_digit_position: availableDigits[1]?.digit_position || 2, rule_type: 'match_code', active: true, sort_order: (curr.at(-1)?.sort_order || 0) + 10, notes: '' }])}>Add rule</button>
       </div>
-      <div className="tableWrap">
+      <div className="tableWrap" style={{ maxHeight: 280 }}>
         <table>
           <thead><tr><th>Source digit</th><th>Target digit</th><th>Type</th><th>Order</th><th>Active</th><th>Notes</th><th>Remove</th></tr></thead>
           <tbody>

@@ -9,7 +9,7 @@ export async function GET() {
   const [digitConfigs, dependencyRules, availableDigits] = await Promise.all([
     sql`select id, digit_position, option_name, is_required, selection_mode, is_active from sku_digit_option_config order by digit_position`,
     sql`select id, source_digit_position, target_digit_position, rule_type, active, sort_order, notes from sku_generation_dependency_rules order by sort_order, source_digit_position, target_digit_position`,
-    sql`select distinct digit_position, option_name from sku_rules where digit_position between 1 and 30 and is_active = true order by digit_position`
+    sql`select distinct digit_position, option_name from cpq_import_rows where status = 'imported' and digit_position between 1 and 30 and coalesce(is_active, true) = true order by digit_position`
   ]);
 
   return NextResponse.json({ digitConfigs, dependencyRules, availableDigits });
