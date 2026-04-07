@@ -10,15 +10,49 @@ type MatrixClientRow = CpqMatrixRow & { _clientKey: string };
 type MatrixFilters = {
   sku: string;
   ruleset: string;
-  handlebar: string[];
-  speed: string[];
-  rack: string[];
-  bike_type: string[];
   country: string[];
   bc_status: Array<'ok' | 'nok'>;
+  fields: Record<string, string>;
 };
 
-const emptyFilters: MatrixFilters = { sku: '', ruleset: '', handlebar: [], speed: [], rack: [], bike_type: [], country: [], bc_status: [] };
+const FILTER_FIELDS: Array<{ key: string; label: string }> = [
+  { key: 'product_assist', label: 'ProductAssist' },
+  { key: 'product_family', label: 'ProductFamily' },
+  { key: 'product_line', label: 'ProductLine' },
+  { key: 'product_model', label: 'ProductModel' },
+  { key: 'product_type', label: 'ProductType' },
+  { key: 'handlebar_type', label: 'HandlebarType' },
+  { key: 'speeds', label: 'Speeds' },
+  { key: 'mudguards_and_rack', label: 'MudguardsAndRack' },
+  { key: 'territory', label: 'Territory' },
+  { key: 'main_frame_colour', label: 'MainFrameColour' },
+  { key: 'rear_frame_colour', label: 'RearFrameColour' },
+  { key: 'front_carrier_block', label: 'FrontCarrierBlock' },
+  { key: 'lighting', label: 'Lighting' },
+  { key: 'saddle_height', label: 'SaddleHeight' },
+  { key: 'gear_ratio', label: 'GearRatio' },
+  { key: 'saddle', label: 'Saddle' },
+  { key: 'tyre', label: 'Tyre' },
+  { key: 'brakes', label: 'Brakes' },
+  { key: 'pedals', label: 'Pedals' },
+  { key: 'saddlebag', label: 'Saddlebag' },
+  { key: 'suspension', label: 'Suspension' },
+  { key: 'bike_type', label: 'BikeType' },
+  { key: 'toolkit', label: 'Toolkit' },
+  { key: 'saddle_light', label: 'SaddleLight' },
+  { key: 'config_code', label: 'ConfigCode' },
+  { key: 'option_box', label: 'OptionBox' },
+  { key: 'frame_material', label: 'FrameMaterial' },
+  { key: 'frame_set', label: 'FrameSet' },
+  { key: 'component_colour', label: 'ComponentColour' },
+  { key: 'on_bike_accessories', label: 'OnBikeAccessories' },
+  { key: 'handlebar_stem_colour', label: 'HandlebarStemColour' },
+  { key: 'handlebar_pin_colour', label: 'HandlebarPinColour' },
+  { key: 'front_frame_colour', label: 'FrontFrameColour' },
+  { key: 'front_fork_colour', label: 'FrontForkColour' }
+];
+
+const emptyFilters: MatrixFilters = { sku: '', ruleset: '', country: [], bc_status: [], fields: {} };
 
 function normalizeBcStatus(raw: string): 'ok' | 'nok' | '' {
   const lowered = String(raw || '').trim().toLowerCase();
@@ -73,19 +107,21 @@ export default function CpqMatrixPage() {
     const rowStatus = normalizeBcStatus(row.bc_status);
     if (skuSearch && !String(row.sku_code || '').toLowerCase().includes(skuSearch)) return false;
     if (filters.ruleset && String(row.cpq_ruleset || '') !== filters.ruleset) return false;
-    if (filters.handlebar.length && !filters.handlebar.includes(String(row.handlebar || ''))) return false;
-    if (filters.speed.length && !filters.speed.includes(String(row.speed || ''))) return false;
-    if (filters.rack.length && !filters.rack.includes(String(row.rack || ''))) return false;
-    if (filters.bike_type.length && !filters.bike_type.includes(String(row.bike_type || ''))) return false;
     if (filters.bc_status.length && !filters.bc_status.includes(rowStatus as 'ok' | 'nok')) return false;
     if (filters.country.length && !filters.country.some((country) => !!row.availability?.[country])) return false;
+
+    for (const [field, value] of Object.entries(filters.fields)) {
+      if (!value.trim()) continue;
+      if (!String((row as any)[field] || '').toLowerCase().includes(value.trim().toLowerCase())) return false;
+    }
+
     return true;
   }), [rows, filters]);
 
   const selectedInFiltered = useMemo(() => filteredRows.filter((row) => selectedKeys.has(row._clientKey)), [filteredRows, selectedKeys]);
   const targetRows = selectedInFiltered.length ? selectedInFiltered : filteredRows;
 
-  function toggleMultiFilter(key: 'handlebar' | 'speed' | 'rack' | 'bike_type' | 'country' | 'bc_status', value: string) {
+  function toggleMultiFilter(key: 'country' | 'bc_status', value: string) {
     setFilters((current) => {
       const currentValues = current[key] as string[];
       const exists = currentValues.includes(value);
@@ -139,11 +175,9 @@ export default function CpqMatrixPage() {
     await load();
   }
 
-  const distinct = (key: 'handlebar' | 'speed' | 'rack' | 'bike_type') => Array.from(new Set(rows.map((row) => String(row[key] || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
-
   return (
     <AdminPageShell title="CPQ Matrix" subtitle="Manage CPQ matrix products, brake-aware country availability, and BigCommerce validation.">
-      <div className="note">Countries with a mismatching brake type are greyed out and cannot be assigned.</div>
+      <div className="note">Business filters are mapped to CPQ attributes (not just visible table columns). Use Reset filters or clear Ruleset to quickly restart.</div>
       <div className="matrixLayout">
         <aside className="matrixFilters">
           <div className="filtersHeader"><strong>Filters</strong><button onClick={() => setFilters(emptyFilters)}>Reset filters</button></div>
@@ -152,21 +186,36 @@ export default function CpqMatrixPage() {
             <option value="">All Rulesets</option>
             {rulesets.map((ruleset) => <option key={ruleset} value={ruleset}>{ruleset}</option>)}
           </select>
-          <label className="filterLabel">SKU search</label>
+          <label className="filterLabel">SKU code</label>
           <input value={filters.sku} onChange={(e) => setFilters((all) => ({ ...all, sku: e.target.value }))} placeholder="Search SKU" />
 
-          {([
-            ['handlebar', 'Handlebar', distinct('handlebar')],
-            ['speed', 'Speed', distinct('speed')],
-            ['rack', 'Rack', distinct('rack')],
-            ['bike_type', 'Bike Type', distinct('bike_type')],
-            ['country', 'Country', countries.map((c) => c.country)]
-          ] as const).map(([key, label, items]) => (
-            <div key={key} className="filterGroup">
-              <div className="filterLabel">{label}</div>
-              <div className="choiceList">{items.map((item) => <label key={item} className="choiceRow"><input type="checkbox" checked={(filters[key] as string[]).includes(item)} onChange={() => toggleMultiFilter(key, item)} />{item}</label>)}</div>
+          <div className="filterGroup">
+            <div className="filterLabel">BC Status</div>
+            <div className="choiceList">
+              {(['ok', 'nok'] as const).map((statusValue) => <label key={statusValue} className="choiceRow"><input type="checkbox" checked={filters.bc_status.includes(statusValue)} onChange={() => toggleMultiFilter('bc_status', statusValue)} />{statusValue.toUpperCase()}</label>)}
             </div>
-          ))}
+          </div>
+
+          <div className="filterGroup">
+            <div className="filterLabel">Country</div>
+            <div className="choiceList">{countries.map((c) => <label key={c.country} className="choiceRow"><input type="checkbox" checked={filters.country.includes(c.country)} onChange={() => toggleMultiFilter('country', c.country)} />{c.country}</label>)}</div>
+          </div>
+
+          <details open>
+            <summary className="filterLabel">CPQ attribute filters</summary>
+            <div className="choiceList">
+              {FILTER_FIELDS.map((field) => (
+                <label key={field.key} className="filterLabel">
+                  {field.label}
+                  <input
+                    value={filters.fields[field.key] || ''}
+                    onChange={(e) => setFilters((all) => ({ ...all, fields: { ...all.fields, [field.key]: e.target.value } }))}
+                    placeholder={`Filter ${field.label}`}
+                  />
+                </label>
+              ))}
+            </div>
+          </details>
         </aside>
         <section>
           <div className="toolbar">
@@ -181,7 +230,7 @@ export default function CpqMatrixPage() {
           {saveSummary ? <div className="note">{saveSummary}</div> : null}
           <div className="tableWrap">
             <table className="matrixTableSlim">
-              <thead><tr><th>Pick</th><th>Ruleset</th><th>SKU</th><th>Brake</th><th>Description</th><th>BC Status</th><th>Countries</th></tr></thead>
+              <thead><tr><th>Pick</th><th>Ruleset</th><th>SKU</th><th>ProductLine</th><th>HandlebarType</th><th>Speeds</th><th>MudguardsAndRack</th><th>Brake</th><th>Description</th><th>BC Status</th><th>Countries</th></tr></thead>
               <tbody>
                 {filteredRows.map((row) => {
                   const bcStatus = normalizeBcStatus(row.bc_status);
@@ -189,6 +238,10 @@ export default function CpqMatrixPage() {
                     <td><input type="checkbox" checked={selectedKeys.has(row._clientKey)} onChange={(e) => setSelectedKeys((all) => { const next = new Set(all); if (e.target.checked) next.add(row._clientKey); else next.delete(row._clientKey); return next; })} /></td>
                     <td>{row.cpq_ruleset}</td>
                     <td><input value={String(row.sku_code || '')} disabled={!canSingleUpdate} onChange={(e) => updateRow(row._clientKey, (current) => ({ ...current, sku_code: e.target.value }))} /></td>
+                    <td>{(row as any).product_line || row.bike_type || '-'}</td>
+                    <td>{(row as any).handlebar_type || row.handlebar || '-'}</td>
+                    <td>{(row as any).speeds || row.speed || '-'}</td>
+                    <td>{(row as any).mudguards_and_rack || row.rack || '-'}</td>
                     <td>{row.brake_type === 'reverse' ? 'Reverse' : 'Non-reverse'}</td>
                     <td>{row.description || <span className="subtle">No description</span>}</td>
                     <td><span className={`statusPill ${bcStatus === 'ok' ? 'ok' : 'nok'}`}>{bcStatus ? bcStatus.toUpperCase() : 'NOK'}</span></td>

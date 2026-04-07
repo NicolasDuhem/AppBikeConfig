@@ -13,6 +13,9 @@ export default function SkuDefinitionPage() {
   const [filters, setFilters] = useState<RuleFilters>(defaultRuleFilters);
   const [form, setForm] = useState({ digit_position: 1, option_name: '', code_value: '', choice_value: '', description_element: '' });
   const [pendingDeactivate, setPendingDeactivate] = useState<SkuRule | null>(null);
+  const [pendingEdit, setPendingEdit] = useState<SkuRule | null>(null);
+  const [editChoiceValue, setEditChoiceValue] = useState('');
+  const [editDescriptionElement, setEditDescriptionElement] = useState('');
   const [deactivationReason, setDeactivationReason] = useState('');
 
   async function load() {
@@ -54,6 +57,24 @@ export default function SkuDefinitionPage() {
     setStatus(res.ok ? 'Rule saved' : payload.error || 'Save failed');
     if (res.ok) {
       setForm({ digit_position: 1, option_name: '', code_value: '', choice_value: '', description_element: '' });
+      await load();
+    }
+  }
+
+
+  async function saveEdit() {
+    if (!canManage || !pendingEdit) return;
+    const res = await fetch('/api/sku-rules', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: pendingEdit.id, choice_value: editChoiceValue, description_element: editDescriptionElement })
+    });
+    const payload = await res.json().catch(() => ({}));
+    setStatus(res.ok ? 'Rule updated' : payload.error || 'Update failed');
+    if (res.ok) {
+      setPendingEdit(null);
+      setEditChoiceValue('');
+      setEditDescriptionElement('');
       await load();
     }
   }
@@ -201,6 +222,8 @@ export default function SkuDefinitionPage() {
               <th>Code</th>
               <th>Choice</th>
               <th>Status</th>
+              <th>Last edited by</th>
+              <th>Last edited at</th>
               <th>Deactivated at</th>
               <th>Reason</th>
               <th>Action</th>
@@ -226,6 +249,8 @@ export default function SkuDefinitionPage() {
                 </select>
               </th>
               <th />
+              <th />
+              <th />
               <th>
                 <input placeholder="Filter" value={filters.reason} onChange={(e) => updateFilter('reason', e.target.value)} />
               </th>
@@ -242,29 +267,55 @@ export default function SkuDefinitionPage() {
                 <td>
                   <span className={`statusBadge ${rule.is_active ? 'active' : 'inactive'}`}>{rule.is_active ? 'Active' : 'Inactive'}</span>
                 </td>
+                <td className="secondaryText">{rule.last_edited_by_email || '-'}</td>
+                <td className="secondaryText">{rule.last_edited_at || '-'}</td>
                 <td className="secondaryText">{rule.deactivated_at || '-'}</td>
                 <td className="secondaryText">{rule.deactivation_reason || '-'}</td>
                 <td>
-                  <button
-                    className={rule.is_active ? 'dangerAction' : 'successAction'}
-                    disabled={!canManage}
-                    onClick={() => {
-                      if (rule.is_active) {
-                        setPendingDeactivate(rule);
-                        setDeactivationReason('');
-                        return;
-                      }
-                      toggleActive(rule);
-                    }}
-                  >
-                    {getRuleActionLabel(rule)}
-                  </button>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button disabled={!canManage} onClick={() => { setPendingEdit(rule); setEditChoiceValue(rule.choice_value); setEditDescriptionElement(rule.description_element || ''); }}>Edit</button>
+                    <button
+                      className={rule.is_active ? 'dangerAction' : 'successAction'}
+                      disabled={!canManage}
+                      onClick={() => {
+                        if (rule.is_active) {
+                          setPendingDeactivate(rule);
+                          setDeactivationReason('');
+                          return;
+                        }
+                        toggleActive(rule);
+                      }}
+                    >
+                      {getRuleActionLabel(rule)}
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {pendingEdit ? (
+        <div className="modalBackdrop">
+          <div className="modalCard deactivateModal">
+            <h3>Edit SKU rule</h3>
+            <p className="subtle">Changes are captured in the audit trail with user email and timestamp.</p>
+            <label className="modalLabel">
+              Choice *
+              <input value={editChoiceValue} onChange={(e) => setEditChoiceValue(e.target.value)} />
+            </label>
+            <label className="modalLabel">
+              Description element
+              <textarea rows={3} value={editDescriptionElement} onChange={(e) => setEditDescriptionElement(e.target.value)} />
+            </label>
+            <div className="modalActions">
+              <button onClick={() => setPendingEdit(null)}>Cancel</button>
+              <button className="primary" disabled={!editChoiceValue.trim()} onClick={saveEdit}>Save edit</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {pendingDeactivate ? (
         <div className="modalBackdrop">
@@ -298,3 +349,5 @@ export default function SkuDefinitionPage() {
     </AdminPageShell>
   );
 }
+
+

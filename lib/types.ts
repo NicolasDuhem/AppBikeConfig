@@ -39,6 +39,8 @@ export type SkuRule = {
   is_active: boolean;
   deactivated_at: string | null;
   deactivation_reason: string | null;
+  last_edited_by_email?: string | null;
+  last_edited_at?: string | null;
 };
 
 export type SkuDigitIssue = {
@@ -53,4 +55,36 @@ export type CpqMatrixRow = MatrixRow & {
   cpq_rule_id: number;
   cpq_ruleset: string;
   brake_type: BrakeType;
+  product_assist?: string;
+  product_family?: string;
+  product_line?: string;
+  product_model?: string;
+  product_type?: string;
+  handlebar_type?: string;
+  speeds?: string;
+  mudguards_and_rack?: string;
+  territory?: string;
+  main_frame_colour?: string;
+  rear_frame_colour?: string;
+  front_carrier_block?: string;
+  lighting?: string;
+  saddle_height?: string;
+  gear_ratio?: string;
+  tyre?: string;
+  brakes?: string;
+  pedals?: string;
+  saddlebag?: string;
+  suspension?: string;
+  toolkit?: string;
+  saddle_light?: string;
+  config_code?: string;
+  option_box?: string;
+  frame_material?: string;
+  frame_set?: string;
+  component_colour?: string;
+  on_bike_accessories?: string;
+  handlebar_stem_colour?: string;
+  handlebar_pin_colour?: string;
+  front_frame_colour?: string;
+  front_fork_colour?: string;
 };

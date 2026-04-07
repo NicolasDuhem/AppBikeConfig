@@ -42,12 +42,15 @@ export async function POST(request: Request) {
       rowsSkipped += 1;
       await sql`
         insert into cpq_import_rows (import_run_id, row_number, option_name, choice_value, digit_position, code_value, status, reason)
-        values (${runId}, ${row.rowNumber}, ${optionName}, ${row.choiceValue}, ${row.digitPosition || null}, ${row.codeValue}, 'skipped', 'Option not recognized for CPQ import')
+        values (${runId}, ${row.rowNumber}, ${row.rawOptionName}, ${row.choiceValue}, ${row.digitPosition || null}, ${row.codeValue}, 'skipped', 'Unknown option name skipped')
       `;
       continue;
     }
 
-    if (!row.digitPosition || !/^[A-Z0-9]$/.test(row.codeValue) || !row.choiceValue) {
+    const normalizedCodeValue = row.digitPosition === 0 ? (row.codeValue || '-') : row.codeValue;
+    const validNonStatic = row.digitPosition > 0 && /^[A-Z0-9]$/.test(normalizedCodeValue) && !!row.choiceValue;
+    const validStatic = row.digitPosition === 0 && !!row.choiceValue;
+    if (!validNonStatic && !validStatic) {
       rowsSkipped += 1;
       await sql`
         insert into cpq_import_rows (import_run_id, row_number, option_name, choice_value, digit_position, code_value, status, reason)
@@ -56,51 +59,53 @@ export async function POST(request: Request) {
       continue;
     }
 
-    const digitConflict = await sql`
-      select id, option_name
-      from sku_rules
-      where digit_position = ${row.digitPosition}
-      limit 1
-    ` as any[];
+    if (row.digitPosition > 0) {
+      const digitConflict = await sql`
+        select id, option_name
+        from sku_rules
+        where digit_position = ${row.digitPosition}
+        limit 1
+      ` as any[];
 
-    if (digitConflict.length && String(digitConflict[0].option_name).toLowerCase() !== optionName.toLowerCase()) {
-      rowsSkipped += 1;
-      await sql`
-        insert into cpq_import_rows (import_run_id, row_number, option_name, choice_value, digit_position, code_value, status, reason)
-        values (${runId}, ${row.rowNumber}, ${optionName}, ${row.choiceValue}, ${row.digitPosition}, ${row.codeValue}, 'error', ${`Digit ${row.digitPosition} is tied to option ${digitConflict[0].option_name}`})
-      `;
-      continue;
+      if (digitConflict.length && String(digitConflict[0].option_name).toLowerCase() !== optionName.toLowerCase()) {
+        rowsSkipped += 1;
+        await sql`
+          insert into cpq_import_rows (import_run_id, row_number, option_name, choice_value, digit_position, code_value, status, reason)
+          values (${runId}, ${row.rowNumber}, ${optionName}, ${row.choiceValue}, ${row.digitPosition}, ${row.codeValue}, 'error', ${`Digit ${row.digitPosition} is tied to option ${digitConflict[0].option_name}`})
+        `;
+        continue;
+      }
     }
 
     const existingActive = await sql`
-      select id from sku_rules
+      select id
+      from sku_rules
       where digit_position = ${row.digitPosition}
-        and upper(code_value) = ${row.codeValue}
+        and lower(option_name) = lower(${optionName})
+        and upper(code_value) = upper(${normalizedCodeValue})
         and is_active = true
       limit 1
     ` as any[];
 
     if (existingActive.length) {
-      rowsDeactivated += 1;
+      rowsSkipped += 1;
       await sql`
-        update sku_rules
-        set is_active = false,
-            deactivated_at = now(),
-            deactivation_reason = ${`Upload of a CSV - ${auth.user.email} - ${new Date().toISOString()}`}
-        where id = ${existingActive[0].id}
+        insert into cpq_import_rows (import_run_id, row_number, option_name, choice_value, digit_position, code_value, status, reason)
+        values (${runId}, ${row.rowNumber}, ${optionName}, ${row.choiceValue}, ${row.digitPosition}, ${normalizedCodeValue}, 'skipped', 'Duplicate digit/value skipped')
       `;
+      continue;
     }
 
     await sql`
       insert into sku_rules (digit_position, option_name, code_value, choice_value, description_element, is_active)
-      values (${row.digitPosition}, ${optionName}, ${row.codeValue.toUpperCase()}, ${row.choiceValue}, ${row.choiceValue}, true)
+      values (${row.digitPosition}, ${optionName}, ${normalizedCodeValue.toUpperCase()}, ${row.choiceValue}, ${row.choiceValue}, true)
     `;
 
     rowsImported += 1;
     rowsInserted += 1;
     await sql`
       insert into cpq_import_rows (import_run_id, row_number, option_name, choice_value, digit_position, code_value, status)
-      values (${runId}, ${row.rowNumber}, ${optionName}, ${row.choiceValue}, ${row.digitPosition}, ${row.codeValue}, 'imported')
+      values (${runId}, ${row.rowNumber}, ${optionName}, ${row.choiceValue}, ${row.digitPosition}, ${normalizedCodeValue}, 'imported')
     `;
   }
 

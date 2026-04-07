@@ -11,10 +11,58 @@ export async function GET() {
   const countries = await getCpqCountries();
   const rulesets = await sql`select distinct cpq_ruleset from cpq_sku_rules where is_active = true and cpq_ruleset <> '' order by cpq_ruleset`;
   const products = await sql`
-    select id as cpq_rule_id, sku_code, cpq_ruleset, brake_type, handlebar, speed, rack, bike_type, colour, light, seatpost_length, saddle, description, coalesce(bc_status, '') as bc_status
-    from cpq_sku_rules
-    where is_active = true
-    order by cpq_ruleset, bike_type nulls last, sku_code
+    select
+      r.id as cpq_rule_id,
+      r.sku_code,
+      r.cpq_ruleset,
+      r.brake_type,
+      r.handlebar,
+      r.speed,
+      r.rack,
+      r.bike_type,
+      r.colour,
+      r.light,
+      r.seatpost_length,
+      r.saddle,
+      r.description,
+      coalesce(r.bc_status, '') as bc_status,
+      p.product_assist,
+      p.product_family,
+      p.product_line,
+      p.product_model,
+      p.product_type,
+      p.handlebar_type,
+      p.speeds,
+      p.mudguardsandrack as mudguards_and_rack,
+      p.territory,
+      p.mainframecolour as main_frame_colour,
+      p.rearframecolour as rear_frame_colour,
+      p.frontcarrierblock as front_carrier_block,
+      p.lighting,
+      p.saddleheight as saddle_height,
+      p.gearratio as gear_ratio,
+      p.tyre,
+      p.brakes,
+      p.pedals,
+      p.saddlebag,
+      p.suspension,
+      p.biketype,
+      p.toolkit,
+      p.saddlelight as saddle_light,
+      p.configcode as config_code,
+      p.optionbox as option_box,
+      p.framematerial as frame_material,
+      p.frameset as frame_set,
+      p.componentcolour as component_colour,
+      p.onbikeaccessories as on_bike_accessories,
+      p.handlebarstemcolour as handlebar_stem_colour,
+      p.handlebarpincolour as handlebar_pin_colour,
+      p.frontframecolour as front_frame_colour,
+      p.frontforkcolour as front_fork_colour
+    from cpq_sku_rules r
+    left join cpq_products p on p.id = r.cpq_product_id
+    where r.is_active = true
+    order by r.cpq_ruleset, r.bike_type nulls last, r.sku_code
   `;
   const availabilityRows = await sql`
     select a.cpq_sku_rule_id, c.country, c.brake_type as country_brake_type, a.available
