@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireApiRole } from '@/lib/api-auth';
 import { sql } from '@/lib/db';
+import { buildCpqAttributeEntries, importRowCacheKey } from '@/lib/cpq-product-attributes';
 
 function pick(row: any, ...keys: string[]) {
   for (const key of keys) {
@@ -23,6 +24,7 @@ export async function POST(request: Request) {
   if (!['reverse', 'non_reverse'].includes(brakeMode)) return NextResponse.json({ error: 'brakeMode is required' }, { status: 400 });
 
   let pushed = 0;
+  const importRowIdCache = new Map<string, number>();
   const skippedDuplicateSkus: string[] = [];
   const failedRows: Array<{ skuCode: string; cpqRuleset: string; reason: string }> = [];
   const seenSkuCodes = new Set<string>();
@@ -52,28 +54,109 @@ export async function POST(request: Request) {
 
     const cpqProductInsert = await sql`
       insert into cpq_products (
-        import_run_id, cpq_ruleset, product_assist, product_family, product_line, product_model, product_type,
-        brake_reverse, brake_non_reverse, sku_code, description, handlebar_type, speeds, mudguardsandrack, territory,
-        mainframecolour, rearframecolour, frontcarrierblock, lighting, saddleheight, gearratio, saddle, tyre, brakes,
-        pedals, saddlebag, suspension, biketype, toolkit, saddlelight, configcode, optionbox, framematerial, frameset,
-        componentcolour, onbikeaccessories, handlebarstemcolour, handlebarpincolour, frontframecolour, frontforkcolour,
-        position29, position30, created_by
+        import_run_id,
+        cpq_ruleset,
+        brake_reverse,
+        brake_non_reverse,
+        sku_code,
+        created_by
       )
       values (
-        ${runId || null}, ${cpqRuleset}, ${pick(row, 'ProductAssist')}, ${pick(row, 'ProductFamily')},
-        ${pick(row, 'ProductLine')}, ${pick(row, 'ProductModel')}, ${pick(row, 'ProductType')},
-        ${brakeMode === 'reverse' ? 'yes' : 'no'}, ${brakeMode === 'non_reverse' ? 'yes' : 'no'},
-        ${skuCode}, ${pick(row, 'Description')}, ${pick(row, 'HandlebarType')}, ${pick(row, 'Speeds')}, ${pick(row, 'MudguardsAndRack', 'MudguardsandRack')}, ${pick(row, 'Territory')},
-        ${pick(row, 'MainFrameColour')}, ${pick(row, 'RearFrameColour')}, ${pick(row, 'FrontCarrierBlock')}, ${pick(row, 'Lighting')}, ${pick(row, 'SaddleHeight')},
-        ${pick(row, 'GearRatio')}, ${pick(row, 'Saddle')}, ${pick(row, 'Tyre')}, ${pick(row, 'Brakes')}, ${pick(row, 'Pedals')},
-        ${pick(row, 'Saddlebag', 'SaddleBag')}, ${pick(row, 'Suspension')}, ${pick(row, 'BikeType')}, ${pick(row, 'Toolkit')}, ${pick(row, 'SaddleLight')},
-        ${pick(row, 'ConfigCode')}, ${pick(row, 'OptionBox')}, ${pick(row, 'FrameMaterial')}, ${pick(row, 'FrameSet')}, ${pick(row, 'ComponentColour')},
-        ${pick(row, 'OnBikeAccessories')}, ${pick(row, 'HandlebarStemColour')}, ${pick(row, 'HandlebarPinColour')}, ${pick(row, 'FrontFrameColour')},
-        ${pick(row, 'FrontForkColour')}, ${pick(row, 'Position29')}, ${pick(row, 'Position30')}, ${auth.user.id}
+        ${runId || null},
+        ${cpqRuleset},
+        ${brakeMode === 'reverse' ? 'yes' : 'no'},
+        ${brakeMode === 'non_reverse' ? 'yes' : 'no'},
+        ${skuCode},
+        ${auth.user.id}
       )
       returning id
     ` as any[];
     const cpqProductId = Number(cpqProductInsert[0].id);
+
+
+    const attributeEntries = buildCpqAttributeEntries({
+      ...row,
+      CPQRuleset: cpqRuleset,
+      BrakeReverse: brakeMode === 'reverse' ? 'yes' : 'no',
+      BrakeNonReverse: brakeMode === 'non_reverse' ? 'yes' : 'no'
+    });
+
+    for (const attribute of attributeEntries) {
+      const cacheKey = importRowCacheKey(attribute.optionName, attribute.value);
+      let importRowId = importRowIdCache.get(cacheKey);
+
+      if (!importRowId) {
+        const existingImportRow = await sql`
+          select id
+          from cpq_import_rows
+          where status = 'imported'
+            and lower(option_name) = lower(${attribute.optionName})
+            and lower(choice_value) = lower(${attribute.value})
+          order by id
+          limit 1
+        ` as any[];
+
+        if (existingImportRow.length) {
+          importRowId = Number(existingImportRow[0].id);
+        } else {
+          const insertedImportRow = await sql`
+            insert into cpq_import_rows (
+              import_run_id,
+              row_number,
+              option_name,
+              choice_value,
+              digit_position,
+              code_value,
+              status,
+              normalized_option_name,
+              action_attempted
+            )
+            values (
+              ${runId || null},
+              0,
+              ${attribute.optionName},
+              ${attribute.value},
+              null,
+              null,
+              'imported',
+              ${attribute.optionName},
+              'reference_attribute'
+            )
+            on conflict do nothing
+            returning id
+          ` as any[];
+
+          if (insertedImportRow.length) {
+            importRowId = Number(insertedImportRow[0].id);
+          } else {
+            const fallbackImportRow = await sql`
+              select id
+              from cpq_import_rows
+              where status = 'imported'
+                and lower(option_name) = lower(${attribute.optionName})
+                and lower(choice_value) = lower(${attribute.value})
+              order by id
+              limit 1
+            ` as any[];
+            if (fallbackImportRow.length) importRowId = Number(fallbackImportRow[0].id);
+          }
+        }
+
+        if (!importRowId) {
+          failedRows.push({ skuCode, cpqRuleset, reason: `Failed to resolve CPQ import row for ${attribute.optionName}` });
+          continue;
+        }
+
+        importRowIdCache.set(cacheKey, importRowId);
+      }
+
+      await sql`
+        insert into cpq_product_attributes (cpq_product_id, option_name, cpq_import_row_id)
+        values (${cpqProductId}, ${attribute.optionName}, ${importRowId})
+        on conflict (cpq_product_id, option_name)
+        do update set cpq_import_row_id = excluded.cpq_import_row_id, updated_at = now()
+      `;
+    }
 
     const existingActive = await sql`
       select id from cpq_sku_rules
