@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireApiRole } from '@/lib/api-auth';
 import { sql } from '@/lib/db';
-import { mapCsvOptionNameToCanonical } from '@/lib/cpq';
+import { mapOptionNameToCanonical } from '@/lib/cpq-core';
 
 type RawOptionRow = {
   sku_rule_id: number;
@@ -13,7 +13,7 @@ type RawOptionRow = {
 };
 
 function canonicalOptionName(optionName: string) {
-  return mapCsvOptionNameToCanonical(optionName) || optionName;
+  return mapOptionNameToCanonical(optionName) || optionName;
 }
 
 export async function GET() {
