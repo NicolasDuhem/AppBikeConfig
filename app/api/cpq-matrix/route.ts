@@ -58,9 +58,15 @@ export async function GET() {
       p.handlebarstemcolour as handlebar_stem_colour,
       p.handlebarpincolour as handlebar_pin_colour,
       p.frontframecolour as front_frame_colour,
-      p.frontforkcolour as front_fork_colour
+      p.frontforkcolour as front_fork_colour,
+      a.asset_url as picture_asset_url,
+      a.png_url as picture_png_url,
+      a.asset_id as picture_asset_id,
+      a.notes as picture_notes,
+      a.selected_at as picture_selected_at
     from cpq_sku_rules r
     left join cpq_products p on p.id = r.cpq_product_id
+    left join cpq_product_assets a on a.cpq_sku_rule_id = r.id
     where r.is_active = true
     order by r.cpq_ruleset, r.bike_type nulls last, r.sku_code
   `;

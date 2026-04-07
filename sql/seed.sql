@@ -31,6 +31,10 @@ insert into feature_flags (flag_key, flag_name, description, enabled)
 values ('import_csv_cpq','Import CSV CPQ','Enables CPQ CSV import flow and CPQ product generation workflow.',false)
 on conflict (flag_key) do update set flag_name = excluded.flag_name, description = excluded.description;
 
+insert into feature_flags (flag_key, flag_name, description, enabled)
+values ('cpq_bdam_picture_picker','CPQ BDAM Picture Picker','Enables the BDAM iframe-based picture picker on CPQ Matrix items.',false)
+on conflict (flag_key) do update set flag_name = excluded.flag_name, description = excluded.description;
+
 insert into cpq_countries (country, region, brake_type)
 select country, region, 'non_reverse' from countries
 on conflict (country) do nothing;

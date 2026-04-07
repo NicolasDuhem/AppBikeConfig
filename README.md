@@ -20,6 +20,11 @@ Run in this order:
 3. `sql/002_auth_rbac.sql` (required for auth + RBAC + audit)
 4. `sql/003_sku_rule_activation_and_constraints.sql`
 5. `sql/004_products_bc_status.sql` (adds/polices persisted `bc_status`)
+6. `sql/005_cpq_feature_flag.sql` (feature flags + CPQ import tables)
+7. `sql/006_cpq_matrix_tables.sql`
+8. `sql/007_cpq_digit0_and_sku_rule_edit_audit.sql`
+9. `sql/008_cpq_import_diagnostics.sql`
+10. `sql/009_cpq_bdam_picture_picker.sql` (CPQ BDAM picker asset persistence)
 
 ## Environment variables
 
@@ -160,3 +165,8 @@ Then manually test:
 - Duplicate SKU code protection is enforced at push stage (`/api/cpq/push`) when creating CPQ matrix rows. Duplicate SKUs are skipped and reported in push summary output.
 - Latest active display value per structural key is selected using newest active `sku_rules.id` (because `sku_rules` currently has no `updated_at`/`created_at` columns).
 - Generation route always resolves with JSON success/error and updates `cpq_import_runs.current_phase` (`generating_combinations`, `generation_completed`, `generation_failed`) for diagnostics.
+
+## CPQ BDAM picture picker (manual v1)
+
+- See `docs/cpq-bdam-picture-picker.md` for the feature-flagged CPQ Matrix BDAM picker flow.
+- This version is iframe/manual-capture only (no server-side BDAM API integration).

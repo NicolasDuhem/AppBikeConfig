@@ -1,6 +1,7 @@
 import { sql } from '@/lib/db';
 
 export const IMPORT_CPQ_FLAG_KEY = 'import_csv_cpq';
+export const CPQ_BDAM_PICTURE_PICKER_FLAG_KEY = 'cpq_bdam_picture_picker';
 
 export type FeatureFlagRow = {
   id: number;

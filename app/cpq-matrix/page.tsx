@@ -4,8 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { CpqCountry, CpqMatrixRow } from '@/lib/types';
 import AdminPageShell from '@/components/admin/admin-page-shell';
+import { canPreviewPicture, canShowPickPictureAction, hasLinkedPicture } from '@/lib/cpq-picture-picker';
 
 type MatrixClientRow = CpqMatrixRow & { _clientKey: string };
+type PictureFormState = { asset_url: string; png_url: string; asset_id: string; notes: string };
 
 type MatrixFilters = {
   sku: string;
@@ -76,6 +78,11 @@ export default function CpqMatrixPage() {
   const [isCheckingBc, setIsCheckingBc] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [bulkCountryId, setBulkCountryId] = useState(0);
+  const [isPicturePickerEnabled, setIsPicturePickerEnabled] = useState(false);
+  const [pictureRow, setPictureRow] = useState<MatrixClientRow | null>(null);
+  const [pictureForm, setPictureForm] = useState<PictureFormState>({ asset_url: '', png_url: '', asset_id: '', notes: '' });
+  const [pictureStatus, setPictureStatus] = useState('');
+  const [iframeError, setIframeError] = useState(false);
 
   const canSingleUpdate = permissions.includes('matrix.update.single');
   const canBulkUpdate = permissions.includes('matrix.update.bulk');
@@ -96,6 +103,7 @@ export default function CpqMatrixPage() {
     setCountries(data.countries || []);
     setRulesets(data.rulesets || []);
     setPermissions(me.permissions || []);
+    setIsPicturePickerEnabled(!!flags.cpq_bdam_picture_picker);
     setSelectedKeys(new Set());
     setDirtyKeys({});
   }, [router]);
@@ -175,6 +183,39 @@ export default function CpqMatrixPage() {
     await load();
   }
 
+  function openPictureModal(row: MatrixClientRow) {
+    setPictureRow(row);
+    setPictureStatus('');
+    setIframeError(false);
+    setPictureForm({
+      asset_url: String(row.picture_asset_url || ''),
+      png_url: String(row.picture_png_url || ''),
+      asset_id: String(row.picture_asset_id || ''),
+      notes: String(row.picture_notes || '')
+    });
+  }
+
+  async function savePicture() {
+    if (!pictureRow) return;
+    setPictureStatus('Saving picture details...');
+    const res = await fetch('/api/cpq-matrix/picture', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cpq_rule_id: pictureRow.cpq_rule_id, ...pictureForm })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setPictureStatus(data.error || 'Failed to save picture details.');
+      return;
+    }
+    setPictureStatus('Picture details saved.');
+    setPictureRow(null);
+    await load();
+  }
+
+  const previewUrl = pictureForm.png_url.trim() || pictureForm.asset_url.trim();
+  const previewEnabled = canPreviewPicture(previewUrl);
+
   return (
     <AdminPageShell title="CPQ Matrix" subtitle="Manage CPQ matrix products, brake-aware country availability, and BigCommerce validation.">
       <div className="note">Business filters are mapped to CPQ attributes (not just visible table columns). Use Reset filters or clear Ruleset to quickly restart.</div>
@@ -230,10 +271,11 @@ export default function CpqMatrixPage() {
           {saveSummary ? <div className="note">{saveSummary}</div> : null}
           <div className="tableWrap">
             <table className="matrixTableSlim">
-              <thead><tr><th>Pick</th><th>Ruleset</th><th>SKU</th><th>ProductLine</th><th>HandlebarType</th><th>Speeds</th><th>MudguardsAndRack</th><th>Brake</th><th>Description</th><th>BC Status</th><th>Countries</th></tr></thead>
+              <thead><tr><th>Pick</th><th>Ruleset</th><th>SKU</th><th>ProductLine</th><th>HandlebarType</th><th>Speeds</th><th>MudguardsAndRack</th><th>Brake</th><th>Description</th><th>Picture</th><th>BC Status</th><th>Countries</th></tr></thead>
               <tbody>
                 {filteredRows.map((row) => {
                   const bcStatus = normalizeBcStatus(row.bc_status);
+                  const hasPicture = hasLinkedPicture(row);
                   return <tr key={row._clientKey}>
                     <td><input type="checkbox" checked={selectedKeys.has(row._clientKey)} onChange={(e) => setSelectedKeys((all) => { const next = new Set(all); if (e.target.checked) next.add(row._clientKey); else next.delete(row._clientKey); return next; })} /></td>
                     <td>{row.cpq_ruleset}</td>
@@ -244,6 +286,11 @@ export default function CpqMatrixPage() {
                     <td>{(row as any).mudguards_and_rack || row.rack || '-'}</td>
                     <td>{row.brake_type === 'reverse' ? 'Reverse' : 'Non-reverse'}</td>
                     <td>{row.description || <span className="subtle">No description</span>}</td>
+                    <td>
+                      {hasPicture ? <span className="statusPill ok">Picture linked</span> : <span className="subtle">No picture</span>}
+                      {hasPicture ? <div><a className="subtle" href={String(row.picture_asset_url)} target="_blank" rel="noreferrer">View asset</a></div> : null}
+                      {canShowPickPictureAction(isPicturePickerEnabled) ? <div style={{ marginTop: 6 }}><button disabled={!canSingleUpdate} onClick={() => openPictureModal(row)}>Pick picture</button></div> : null}
+                    </td>
                     <td><span className={`statusPill ${bcStatus === 'ok' ? 'ok' : 'nok'}`}>{bcStatus ? bcStatus.toUpperCase() : 'NOK'}</span></td>
                     <td><div className="countryBadges">{countries.map((country) => {
                       const available = !!row.availability?.[country.country];
@@ -257,6 +304,50 @@ export default function CpqMatrixPage() {
           </div>
         </section>
       </div>
+      {canShowPickPictureAction(isPicturePickerEnabled) && pictureRow ? (
+        <div className="modalBackdrop" onClick={() => setPictureRow(null)}>
+          <div className="modalCard bdamModal" onClick={(e) => e.stopPropagation()}>
+            <h3>Pick picture</h3>
+            <p className="subtle">Browse BDAM in the embedded view. If needed, open BDAM in a new tab and paste the selected asset link below.</p>
+            <div className="bdamEmbedWrap">
+              {!iframeError ? (
+                <iframe
+                  src="https://dam.brompton.com/pages/home.php"
+                  title="BDAM picture picker"
+                  className="bdamFrame"
+                  onError={() => setIframeError(true)}
+                />
+              ) : null}
+              <div className="bdamFallback">
+                <strong>Having trouble with the embedded BDAM view?</strong>
+                <div className="subtle">If BDAM does not load in the embedded view, open it in a new tab and paste the selected asset link below.</div>
+                <button onClick={() => window.open('https://dam.brompton.com/pages/home.php', '_blank', 'noopener,noreferrer')}>Open BDAM in new tab</button>
+                {iframeError ? <div className="subtle">Embedded BDAM appears blocked by browser or site iframe restrictions.</div> : null}
+              </div>
+            </div>
+            <div className="modalGrid" style={{ marginTop: 12 }}>
+              <label>Asset URL
+                <input value={pictureForm.asset_url} onChange={(e) => setPictureForm((curr) => ({ ...curr, asset_url: e.target.value }))} placeholder="https://dam.brompton.com/..." />
+              </label>
+              <label>PNG URL (optional)
+                <input value={pictureForm.png_url} onChange={(e) => setPictureForm((curr) => ({ ...curr, png_url: e.target.value }))} placeholder="https://..." />
+              </label>
+              <label>Asset ID (optional)
+                <input value={pictureForm.asset_id} onChange={(e) => setPictureForm((curr) => ({ ...curr, asset_id: e.target.value }))} />
+              </label>
+              <label>Notes (optional)
+                <input value={pictureForm.notes} onChange={(e) => setPictureForm((curr) => ({ ...curr, notes: e.target.value }))} />
+              </label>
+            </div>
+            {previewEnabled ? <div className="bdamPreview"><img src={previewUrl} alt="Selected asset preview" onError={() => setPictureStatus('Preview unavailable for this URL.')} /></div> : null}
+            <div className="modalActions">
+              <span className="subtle" style={{ marginRight: 'auto' }}>{pictureStatus}</span>
+              <button onClick={() => setPictureRow(null)}>Cancel</button>
+              <button className="primary" onClick={savePicture}>Save</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </AdminPageShell>
   );
 }
