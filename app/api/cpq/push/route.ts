@@ -23,13 +23,32 @@ export async function POST(request: Request) {
   if (!['reverse', 'non_reverse'].includes(brakeMode)) return NextResponse.json({ error: 'brakeMode is required' }, { status: 400 });
 
   let pushed = 0;
-  let updatedExisting = 0;
-  const skippedDuplicates: string[] = [];
+  const skippedDuplicateSkus: string[] = [];
+  const failedRows: Array<{ skuCode: string; cpqRuleset: string; reason: string }> = [];
+  const seenSkuCodes = new Set<string>();
 
   for (const row of rows) {
     const skuCode = pick(row, 'SKU code').trim();
     const cpqRuleset = pick(row, 'CPQRuleset').trim();
     if (!skuCode || !cpqRuleset) continue;
+
+    const normalizedSku = skuCode.toLowerCase();
+    if (seenSkuCodes.has(normalizedSku)) {
+      skippedDuplicateSkus.push(`${skuCode} (${cpqRuleset})`);
+      continue;
+    }
+    seenSkuCodes.add(normalizedSku);
+
+    const existingSku = await sql`
+      select id
+      from cpq_products
+      where lower(sku_code) = lower(${skuCode})
+      limit 1
+    ` as any[];
+    if (existingSku.length) {
+      skippedDuplicateSkus.push(`${skuCode} (${cpqRuleset})`);
+      continue;
+    }
 
     const cpqProductInsert = await sql`
       insert into cpq_products (
@@ -65,48 +84,47 @@ export async function POST(request: Request) {
       limit 1
     ` as any[];
 
-    let cpqRuleId = 0;
     if (existingActive.length) {
-      cpqRuleId = Number(existingActive[0].id);
-      updatedExisting += 1;
-      skippedDuplicates.push(`${skuCode} (${cpqRuleset})`);
-      await sql`
-        update cpq_sku_rules
-        set cpq_product_id = ${cpqProductId},
-            bike_type = ${pick(row, 'BikeType')},
-            handlebar = ${pick(row, 'HandlebarType')},
-            speed = ${pick(row, 'Speeds')},
-            rack = ${pick(row, 'MudguardsAndRack', 'MudguardsandRack')},
-            colour = ${pick(row, 'MainFrameColour')},
-            light = ${pick(row, 'Lighting')},
-            seatpost_length = ${pick(row, 'SaddleHeight')},
-            saddle = ${pick(row, 'Saddle')},
-            description = ${pick(row, 'Description')},
-            updated_at = now()
-        where id = ${cpqRuleId}
-      `;
-    } else {
-      const inserted = await sql`
-        insert into cpq_sku_rules (cpq_product_id, sku_code, cpq_ruleset, brake_type, bike_type, handlebar, speed, rack, colour, light, seatpost_length, saddle, description, created_by)
-        values (
-          ${cpqProductId}, ${skuCode}, ${cpqRuleset}, ${brakeMode}, ${pick(row, 'BikeType')}, ${pick(row, 'HandlebarType')}, ${pick(row, 'Speeds')}, ${pick(row, 'MudguardsAndRack', 'MudguardsandRack')},
-          ${pick(row, 'MainFrameColour')}, ${pick(row, 'Lighting')}, ${pick(row, 'SaddleHeight')}, ${pick(row, 'Saddle')}, ${pick(row, 'Description')}, ${auth.user.id}
-        )
-        returning id
-      ` as any[];
-      cpqRuleId = Number(inserted[0].id);
-      pushed += 1;
+      skippedDuplicateSkus.push(`${skuCode} (${cpqRuleset})`);
+      await sql`delete from cpq_products where id = ${cpqProductId}`;
+      continue;
     }
+
+    const inserted = await sql`
+      insert into cpq_sku_rules (cpq_product_id, sku_code, cpq_ruleset, brake_type, bike_type, handlebar, speed, rack, colour, light, seatpost_length, saddle, description, created_by)
+      values (
+        ${cpqProductId}, ${skuCode}, ${cpqRuleset}, ${brakeMode}, ${pick(row, 'BikeType')}, ${pick(row, 'HandlebarType')}, ${pick(row, 'Speeds')}, ${pick(row, 'MudguardsAndRack', 'MudguardsandRack')},
+        ${pick(row, 'MainFrameColour')}, ${pick(row, 'Lighting')}, ${pick(row, 'SaddleHeight')}, ${pick(row, 'Saddle')}, ${pick(row, 'Description')}, ${auth.user.id}
+      )
+      returning id
+    ` as any[];
+    const cpqRuleId = Number(inserted[0].id);
+    pushed += 1;
 
     const cpqCountries = await sql`select id from cpq_countries` as any[];
     for (const country of cpqCountries) {
-      await sql`
-        insert into cpq_availability (cpq_sku_rule_id, cpq_country_id, available, updated_at)
-        values (${cpqRuleId}, ${country.id}, ${false}, now())
-        on conflict (cpq_sku_rule_id, cpq_country_id) do nothing
-      `;
+      try {
+        await sql`
+          insert into cpq_availability (cpq_sku_rule_id, cpq_country_id, available, updated_at)
+          values (${cpqRuleId}, ${country.id}, ${false}, now())
+          on conflict (cpq_sku_rule_id, cpq_country_id) do nothing
+        `;
+      } catch (error) {
+        failedRows.push({
+          skuCode,
+          cpqRuleset,
+          reason: error instanceof Error ? error.message : 'Failed to create availability row'
+        });
+      }
     }
   }
 
-  return NextResponse.json({ ok: true, pushed, updatedExisting, duplicatePolicy: 'Existing active rows with same SKU + ruleset + brake_type are updated; no conflicting active duplicate is inserted.', skippedDuplicates });
+  return NextResponse.json({
+    ok: true,
+    pushed,
+    skippedDuplicateSkuCount: skippedDuplicateSkus.length,
+    skippedDuplicateSkus,
+    failedRows,
+    duplicatePolicy: 'Duplicate SKU codes are skipped during push. No duplicate SKU code is inserted into CPQ products or active CPQ SKU rules.'
+  });
 }
