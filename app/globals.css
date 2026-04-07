@@ -48,6 +48,8 @@ th { position:sticky; top:0; background:#f8faff; z-index:1; }
 .metricLabel { font-size:11px; color:var(--muted); font-weight:800; text-transform:uppercase; }
 .metricValue { font-size:24px; color:var(--accent); font-weight:800; }
 
+.skuPage { display:flex; flex-direction:column; min-height:0; flex:1; }
+.skuPage .tableViewport { min-height:0; flex:1; }
 .skuPage .pageHeader { display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:8px; }
 .skuPage h2 { margin:0 0 4px; }
 .summaryChips { display:flex; gap:8px; flex-wrap:wrap; align-items:flex-start; }

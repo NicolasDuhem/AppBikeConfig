@@ -9,11 +9,13 @@ export default function SkuDefinitionPage() {
   const [rules, setRules] = useState<SkuRule[]>([]);
   const [digitIssues, setDigitIssues] = useState<SkuDigitIssue[]>([]);
   const [canManage, setCanManage] = useState(false);
+  const [canDelete, setCanDelete] = useState(false);
   const [status, setStatus] = useState('');
   const [filters, setFilters] = useState<RuleFilters>(defaultRuleFilters);
   const [form, setForm] = useState({ digit_position: 1, option_name: '', code_value: '', choice_value: '', description_element: '' });
   const [pendingDeactivate, setPendingDeactivate] = useState<SkuRule | null>(null);
   const [pendingEdit, setPendingEdit] = useState<SkuRule | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<SkuRule | null>(null);
   const [editChoiceValue, setEditChoiceValue] = useState('');
   const [editDescriptionElement, setEditDescriptionElement] = useState('');
   const [deactivationReason, setDeactivationReason] = useState('');
@@ -28,6 +30,7 @@ export default function SkuDefinitionPage() {
     setDigitIssues((payload.digitIssues || []) as SkuDigitIssue[]);
     const me = await meRes.json();
     setCanManage((me.permissions || []).includes('sku.manage'));
+    setCanDelete((me.permissions || []).includes('sku.delete'));
   }
 
   useEffect(() => {
@@ -61,6 +64,16 @@ export default function SkuDefinitionPage() {
     }
   }
 
+  async function deleteRule(rule: SkuRule) {
+    if (!canDelete) return;
+    const res = await fetch(`/api/sku-rules?id=${rule.id}`, { method: 'DELETE' });
+    const payload = await res.json().catch(() => ({}));
+    setStatus(res.ok ? 'Rule permanently deleted.' : payload.error || 'Delete failed');
+    if (res.ok) {
+      setPendingDelete(null);
+      await load();
+    }
+  }
 
   async function saveEdit() {
     if (!canManage || !pendingEdit) return;
@@ -283,6 +296,7 @@ export default function SkuDefinitionPage() {
                     >
                       {getRuleActionLabel(rule)}
                     </button>
+                    {canDelete ? <button className="dangerAction" onClick={() => setPendingDelete(rule)}>Delete permanently</button> : null}
                   </div>
                 </td>
               </tr>
@@ -337,6 +351,24 @@ export default function SkuDefinitionPage() {
               <button className="primary" disabled={!deactivationReason.trim()} onClick={() => toggleActive(pendingDeactivate, deactivationReason.trim())}>
                 Confirm deactivation
               </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {pendingDelete ? (
+        <div className="modalBackdrop">
+          <div className="modalCard deactivateModal">
+            <h3>Permanent delete SKU rule</h3>
+            <p className="subtle">This action permanently removes the row from the database and cannot be undone.</p>
+            <div className="card" style={{ marginBottom: 12 }}>
+              <strong>
+                Digit {pendingDelete.digit_position} · {pendingDelete.option_name} · {pendingDelete.code_value} · {pendingDelete.choice_value}
+              </strong>
+            </div>
+            <div className="modalActions">
+              <button onClick={() => setPendingDelete(null)}>Cancel</button>
+              <button className="dangerAction" onClick={() => deleteRule(pendingDelete)}>Delete permanently</button>
             </div>
           </div>
         </div>

@@ -1,27 +1,19 @@
 import { NextResponse } from 'next/server';
-import { requireApiLogin } from '@/lib/api-auth';
+import { requireApiRole } from '@/lib/api-auth';
 import { getFeatureFlags } from '@/lib/feature-flags';
 import { sql } from '@/lib/db';
 
 export async function GET() {
-  const auth = await requireApiLogin();
+  const auth = await requireApiRole('feature_flags.manage');
   if (auth instanceof NextResponse) return auth;
-
-  if (!auth.roles.includes('sys_admin')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
 
   const rows = await getFeatureFlags();
   return NextResponse.json({ rows });
 }
 
 export async function PATCH(request: Request) {
-  const auth = await requireApiLogin();
+  const auth = await requireApiRole('feature_flags.manage');
   if (auth instanceof NextResponse) return auth;
-
-  if (!auth.roles.includes('sys_admin')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
 
   const body = await request.json();
   const flagKey = String(body.flag_key || '').trim();

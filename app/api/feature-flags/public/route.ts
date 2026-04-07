@@ -8,5 +8,5 @@ export async function GET() {
 
   const importCsvCpq = await isFeatureEnabled(IMPORT_CPQ_FLAG_KEY);
   const cpqBdamPicturePicker = await isFeatureEnabled(CPQ_BDAM_PICTURE_PICKER_FLAG_KEY);
-  return NextResponse.json({ import_csv_cpq: importCsvCpq, cpq_bdam_picture_picker: cpqBdamPicturePicker, roles: auth.roles });
+  return NextResponse.json({ import_csv_cpq: importCsvCpq, cpq_bdam_picture_picker: cpqBdamPicturePicker, roles: auth.roles, permissions: auth.permissions });
 }

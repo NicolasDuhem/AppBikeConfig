@@ -18,6 +18,8 @@ type DigitChoice = {
 type DigitGroup = {
   digitPosition: number;
   optionName: string;
+  isRequired: boolean;
+  selectionMode: 'single' | 'multi';
   choices: DigitChoice[];
 };
 
@@ -30,6 +32,7 @@ export default function CpqFeatureClient() {
   const [picked, setPicked] = useState<Record<number, boolean>>({});
   const [status, setStatus] = useState('');
   const [filters, setFilters] = useState<Record<string, string[]>>({});
+  const [filterSearch, setFilterSearch] = useState('');
   const [visibleColumns, setVisibleColumns] = useState<string[]>(CPQ_COLUMNS);
   const [showFilters, setShowFilters] = useState(false);
   const [showColumnManager, setShowColumnManager] = useState(false);
@@ -73,6 +76,7 @@ export default function CpqFeatureClient() {
     return [column, values];
   })), [rows]);
 
+  const filteredFilterColumns = useMemo(() => visibleColumns.filter((column) => column.toLowerCase().includes(filterSearch.toLowerCase())), [filterSearch, visibleColumns]);
   const filteredRows = useMemo(() => rows.filter((row) => rowMatchesMultiSelectFilters(row, filters)), [rows, filters]);
   const selectedCount = Object.values(picked).filter(Boolean).length;
 
@@ -159,14 +163,21 @@ export default function CpqFeatureClient() {
       </div>
 
       <div className="card compactCard compactSection">
-        <div className="filtersHeader"><strong>Digit-based options (1-30)</strong></div>
+        <div className="filtersHeader"><strong>Digit-based options (1-30)</strong><button onClick={() => setSelectedCodesByDigit({})}>Reset option selections</button></div>
         {loadingOptions ? <div className="subtle">Loading options...</div> : (
           <div className="matrixFilterGrid featureFilterGrid">
             {digitOptions.map((group) => (
-              <label className="filterLabel" key={group.digitPosition}>Digit {group.digitPosition}: {group.optionName}
-                <select multiple className="multiSelect" value={selectedCodesByDigit[group.digitPosition] || []} onChange={(e) => setSelectedCodesByDigit((curr) => ({ ...curr, [group.digitPosition]: selectedValues(e) }))}>
-                  {group.choices.map((choice) => <option key={`${group.digitPosition}-${choice.codeValue}`} value={choice.codeValue}>{choice.codeValue} · {choice.choiceValue}</option>)}
-                </select>
+              <label className="filterLabel" key={group.digitPosition}>Digit {group.digitPosition}: {group.optionName} {group.isRequired ? '(required)' : '(optional)'}
+                {group.selectionMode === 'single' ? (
+                  <select value={(selectedCodesByDigit[group.digitPosition] || [''])[0] || ''} onChange={(e) => setSelectedCodesByDigit((curr) => ({ ...curr, [group.digitPosition]: e.target.value ? [e.target.value] : [] }))}>
+                    {!group.isRequired ? <option value="">-- none --</option> : null}
+                    {group.choices.map((choice) => <option key={`${group.digitPosition}-${choice.codeValue}`} value={choice.codeValue}>{choice.codeValue} · {choice.choiceValue}</option>)}
+                  </select>
+                ) : (
+                  <select multiple className="multiSelect" value={selectedCodesByDigit[group.digitPosition] || []} onChange={(e) => setSelectedCodesByDigit((curr) => ({ ...curr, [group.digitPosition]: selectedValues(e) }))}>
+                    {group.choices.map((choice) => <option key={`${group.digitPosition}-${choice.codeValue}`} value={choice.codeValue}>{choice.codeValue} · {choice.choiceValue}</option>)}
+                  </select>
+                )}
               </label>
             ))}
           </div>
@@ -203,9 +214,10 @@ export default function CpqFeatureClient() {
 
       {showFilters ? (
         <div className="card compactCard compactSection">
-          <div className="filtersHeader"><strong>Generated bike filters</strong><button onClick={() => setFilters({})}>Reset filters</button></div>
+          <div className="filtersHeader"><strong>Generated bike filters</strong><button onClick={() => { setFilters({}); setFilterSearch(''); }}>Reset filters</button></div>
+          <input placeholder="Search filter column..." value={filterSearch} onChange={(e) => setFilterSearch(e.target.value)} style={{ marginBottom: 8 }} />
           <div className="matrixFilterGrid featureFilterGrid">
-            {visibleColumns.map((column) => (
+            {filteredFilterColumns.map((column) => (
               <label key={`filter-${column}`} className="filterLabel">
                 {column}
                 <select multiple className="multiSelect" value={filters[column] || []} onChange={(e) => setFilters((curr) => ({ ...curr, [column]: selectedValues(e) }))}>
