@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import type { CpqCountry, CpqMatrixRow } from '@/lib/types';
 import AdminPageShell from '@/components/admin/admin-page-shell';
@@ -11,10 +11,10 @@ type PictureFormState = { asset_url: string; png_url: string; asset_id: string; 
 
 type MatrixFilters = {
   sku: string;
-  ruleset: string;
+  ruleset: string[];
   country: string[];
   bc_status: Array<'ok' | 'nok'>;
-  fields: Record<string, string>;
+  fields: Record<string, string[]>;
 };
 
 const FILTER_FIELDS: Array<{ key: string; label: string }> = [
@@ -54,7 +54,7 @@ const FILTER_FIELDS: Array<{ key: string; label: string }> = [
   { key: 'front_fork_colour', label: 'FrontForkColour' }
 ];
 
-const emptyFilters: MatrixFilters = { sku: '', ruleset: '', country: [], bc_status: [], fields: {} };
+const defaultFilters: MatrixFilters = { sku: '', ruleset: [], country: [], bc_status: [], fields: {} };
 
 function normalizeBcStatus(raw: string): 'ok' | 'nok' | '' {
   const lowered = String(raw || '').trim().toLowerCase();
@@ -63,13 +63,21 @@ function normalizeBcStatus(raw: string): 'ok' | 'nok' | '' {
   return '';
 }
 
+function selectedValues(event: ChangeEvent<HTMLSelectElement>) {
+  return Array.from(event.target.selectedOptions).map((option) => option.value);
+}
+
+function getFieldValue(row: MatrixClientRow, field: string): string {
+  return String((row as Record<string, any>)[field] || '').trim();
+}
+
 export default function CpqMatrixPage() {
   const router = useRouter();
   const [rows, setRows] = useState<MatrixClientRow[]>([]);
   const [countries, setCountries] = useState<CpqCountry[]>([]);
   const [rulesets, setRulesets] = useState<string[]>([]);
   const [permissions, setPermissions] = useState<string[]>([]);
-  const [filters, setFilters] = useState<MatrixFilters>(emptyFilters);
+  const [filters, setFilters] = useState<MatrixFilters>(defaultFilters);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [dirtyKeys, setDirtyKeys] = useState<Record<string, boolean>>({});
   const [status, setStatus] = useState('');
@@ -83,9 +91,17 @@ export default function CpqMatrixPage() {
   const [pictureForm, setPictureForm] = useState<PictureFormState>({ asset_url: '', png_url: '', asset_id: '', notes: '' });
   const [pictureStatus, setPictureStatus] = useState('');
   const [iframeError, setIframeError] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
 
   const canSingleUpdate = permissions.includes('matrix.update.single');
   const canBulkUpdate = permissions.includes('matrix.update.bulk');
+
+  const filterValueOptions = useMemo(() => {
+    return Object.fromEntries(FILTER_FIELDS.map((field) => {
+      const options = Array.from(new Set(rows.map((row) => getFieldValue(row, field.key)).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+      return [field.key, options];
+    }));
+  }, [rows]);
 
   const load = useCallback(async () => {
     const [flagsRes, res, meRes] = await Promise.all([fetch('/api/feature-flags/public'), fetch('/api/cpq-matrix'), fetch('/api/me')]);
@@ -114,13 +130,14 @@ export default function CpqMatrixPage() {
     const skuSearch = filters.sku.trim().toLowerCase();
     const rowStatus = normalizeBcStatus(row.bc_status);
     if (skuSearch && !String(row.sku_code || '').toLowerCase().includes(skuSearch)) return false;
-    if (filters.ruleset && String(row.cpq_ruleset || '') !== filters.ruleset) return false;
+    if (filters.ruleset.length && !filters.ruleset.includes(String(row.cpq_ruleset || ''))) return false;
     if (filters.bc_status.length && !filters.bc_status.includes(rowStatus as 'ok' | 'nok')) return false;
     if (filters.country.length && !filters.country.some((country) => !!row.availability?.[country])) return false;
 
-    for (const [field, value] of Object.entries(filters.fields)) {
-      if (!value.trim()) continue;
-      if (!String((row as any)[field] || '').toLowerCase().includes(value.trim().toLowerCase())) return false;
+    for (const [field, selected] of Object.entries(filters.fields)) {
+      if (!selected.length) continue;
+      const value = getFieldValue(row, field);
+      if (!selected.includes(value)) return false;
     }
 
     return true;
@@ -128,14 +145,6 @@ export default function CpqMatrixPage() {
 
   const selectedInFiltered = useMemo(() => filteredRows.filter((row) => selectedKeys.has(row._clientKey)), [filteredRows, selectedKeys]);
   const targetRows = selectedInFiltered.length ? selectedInFiltered : filteredRows;
-
-  function toggleMultiFilter(key: 'country' | 'bc_status', value: string) {
-    setFilters((current) => {
-      const currentValues = current[key] as string[];
-      const exists = currentValues.includes(value);
-      return { ...current, [key]: exists ? currentValues.filter((item) => item !== value) : [...currentValues, value] } as MatrixFilters;
-    });
-  }
 
   function updateRow(rowKey: string, updater: (row: MatrixClientRow) => MatrixClientRow) {
     setRows((all) => all.map((row) => (row._clientKey === rowKey ? updater(row) : row)));
@@ -218,59 +227,64 @@ export default function CpqMatrixPage() {
 
   return (
     <AdminPageShell title="CPQ Matrix" subtitle="Manage CPQ matrix products, brake-aware country availability, and BigCommerce validation.">
-      <div className="note">Business filters are mapped to CPQ attributes (not just visible table columns). Use Reset filters or clear Ruleset to quickly restart.</div>
-      <div className="matrixLayout">
-        <aside className="matrixFilters">
-          <div className="filtersHeader"><strong>Filters</strong><button onClick={() => setFilters(emptyFilters)}>Reset filters</button></div>
-          <label className="filterLabel">Ruleset</label>
-          <select value={filters.ruleset} onChange={(e) => setFilters((all) => ({ ...all, ruleset: e.target.value }))}>
-            <option value="">All Rulesets</option>
-            {rulesets.map((ruleset) => <option key={ruleset} value={ruleset}>{ruleset}</option>)}
-          </select>
-          <label className="filterLabel">SKU code</label>
-          <input value={filters.sku} onChange={(e) => setFilters((all) => ({ ...all, sku: e.target.value }))} placeholder="Search SKU" />
+      <div className="matrixToolbar toolbar compactToolbar">
+        <button onClick={() => setShowFilters((current) => !current)}>{showFilters ? 'Hide filters' : 'Show filters'}</button>
+        <button onClick={() => setFilters(defaultFilters)}>Reset filters</button>
+        <button className="primary" disabled={!canSingleUpdate || isSaving} onClick={saveAllDirtyRows}>Save changes</button>
+        <select value={bulkCountryId} onChange={(e) => setBulkCountryId(Number(e.target.value))}><option value={0}>Bulk country</option>{countries.map((country) => <option key={country.id} value={country.id}>{country.country} ({country.region})</option>)}</select>
+        <button disabled={!canBulkUpdate || !bulkCountryId || !targetRows.length} onClick={() => runBulkCountryUpdate(true)}>Assign country</button>
+        <button disabled={!canBulkUpdate || !bulkCountryId || !targetRows.length} onClick={() => runBulkCountryUpdate(false)}>Remove country</button>
+        <button className="primary" disabled={isCheckingBc || !targetRows.length} onClick={checkBcStatus}>{isCheckingBc ? 'Checking BC…' : 'Check BC status'}</button>
+        <span className="subtle">Scope: {selectedInFiltered.length ? `${selectedInFiltered.length} selected` : `${filteredRows.length} filtered`} / {rows.length} total</span>
+      </div>
+      <div className={`matrixLayout ${showFilters ? '' : 'matrixLayoutExpanded'}`}>
+        {showFilters ? (
+          <aside className="matrixFilters">
+            <div className="filtersHeader"><strong>Filters</strong><button onClick={() => setFilters(defaultFilters)}>Reset</button></div>
+            <label className="filterLabel">Ruleset</label>
+            <select multiple className="multiSelect" value={filters.ruleset} onChange={(e) => setFilters((all) => ({ ...all, ruleset: selectedValues(e) }))}>
+              {rulesets.map((ruleset) => <option key={ruleset} value={ruleset}>{ruleset}</option>)}
+            </select>
+            <label className="filterLabel">SKU search</label>
+            <input value={filters.sku} onChange={(e) => setFilters((all) => ({ ...all, sku: e.target.value }))} placeholder="Search SKU" />
 
-          <div className="filterGroup">
-            <div className="filterLabel">BC Status</div>
-            <div className="choiceList">
-              {(['ok', 'nok'] as const).map((statusValue) => <label key={statusValue} className="choiceRow"><input type="checkbox" checked={filters.bc_status.includes(statusValue)} onChange={() => toggleMultiFilter('bc_status', statusValue)} />{statusValue.toUpperCase()}</label>)}
-            </div>
-          </div>
+            <label className="filterLabel">BC Status</label>
+            <select multiple className="multiSelect" value={filters.bc_status} onChange={(e) => setFilters((all) => ({ ...all, bc_status: selectedValues(e) as Array<'ok' | 'nok'> }))}>
+              <option value="ok">OK</option>
+              <option value="nok">NOK</option>
+            </select>
 
-          <div className="filterGroup">
-            <div className="filterLabel">Country</div>
-            <div className="choiceList">{countries.map((c) => <label key={c.country} className="choiceRow"><input type="checkbox" checked={filters.country.includes(c.country)} onChange={() => toggleMultiFilter('country', c.country)} />{c.country}</label>)}</div>
-          </div>
+            <label className="filterLabel">Country</label>
+            <select multiple className="multiSelect" value={filters.country} onChange={(e) => setFilters((all) => ({ ...all, country: selectedValues(e) }))}>
+              {countries.map((country) => <option key={country.country} value={country.country}>{country.country}</option>)}
+            </select>
 
-          <details open>
-            <summary className="filterLabel">CPQ attribute filters</summary>
-            <div className="choiceList">
-              {FILTER_FIELDS.map((field) => (
-                <label key={field.key} className="filterLabel">
-                  {field.label}
-                  <input
-                    value={filters.fields[field.key] || ''}
-                    onChange={(e) => setFilters((all) => ({ ...all, fields: { ...all.fields, [field.key]: e.target.value } }))}
-                    placeholder={`Filter ${field.label}`}
-                  />
-                </label>
-              ))}
-            </div>
-          </details>
-        </aside>
-        <section>
-          <div className="toolbar">
-            <button className="primary" disabled={!canSingleUpdate || isSaving} onClick={saveAllDirtyRows}>Save changes</button>
-            <button disabled={!canBulkUpdate || !bulkCountryId || !targetRows.length} onClick={() => runBulkCountryUpdate(true)}>Assign country</button>
-            <button disabled={!canBulkUpdate || !bulkCountryId || !targetRows.length} onClick={() => runBulkCountryUpdate(false)}>Remove country</button>
-            <select value={bulkCountryId} onChange={(e) => setBulkCountryId(Number(e.target.value))}><option value={0}>Bulk country</option>{countries.map((country) => <option key={country.id} value={country.id}>{country.country} ({country.region})</option>)}</select>
-            <button className="primary" disabled={isCheckingBc || !targetRows.length} onClick={checkBcStatus}>{isCheckingBc ? 'Checking BC…' : 'Check BC status'}</button>
-            <span className="subtle">{status}</span>
-          </div>
-          {bcSummary ? <div className="note">{bcSummary}</div> : null}
-          {saveSummary ? <div className="note">{saveSummary}</div> : null}
-          <div className="tableWrap">
-            <table className="matrixTableSlim">
+            <details open>
+              <summary className="filterLabel">CPQ attribute filters</summary>
+              <div className="matrixFilterGrid">
+                {FILTER_FIELDS.map((field) => (
+                  <label key={field.key} className="filterLabel">
+                    {field.label}
+                    <select
+                      multiple
+                      className="multiSelect"
+                      value={filters.fields[field.key] || []}
+                      onChange={(e) => setFilters((all) => ({ ...all, fields: { ...all.fields, [field.key]: selectedValues(e) } }))}
+                    >
+                      {(filterValueOptions[field.key] || []).map((option) => <option key={`${field.key}-${option}`} value={option}>{option}</option>)}
+                    </select>
+                  </label>
+                ))}
+              </div>
+            </details>
+          </aside>
+        ) : null}
+        <section className="matrixMainPane">
+          {bcSummary ? <div className="note compactNote">{bcSummary}</div> : null}
+          {saveSummary ? <div className="note compactNote">{saveSummary}</div> : null}
+          {status ? <div className="note compactNote">{status}</div> : null}
+          <div className="tableWrap matrixTableWrap">
+            <table className="matrixTableOperational">
               <thead><tr><th>Pick</th><th>Ruleset</th><th>SKU</th><th>ProductLine</th><th>HandlebarType</th><th>Speeds</th><th>MudguardsAndRack</th><th>Brake</th><th>Description</th><th>Picture</th><th>BC Status</th><th>Countries</th></tr></thead>
               <tbody>
                 {filteredRows.map((row) => {

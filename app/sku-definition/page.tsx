@@ -115,19 +115,14 @@ export default function SkuDefinitionPage() {
   return (
     <AdminPageShell title="Bike SKU Definition" subtitle="Manage SKU definition rules, lifecycle, and activation safety.">
     <div className="skuPage">
-      <div className="pageHeader">
-        <div>
-          <h2>Bike SKU Definition</h2>
-          <p className="subtle">Manage SKU definition rules, quickly filter entries, and control activation state with clear operational guardrails.</p>
-        </div>
-        <div className="summaryChips" aria-label="Rules summary">
-          <span className="summaryChip">Total rules: {statusSummary.total}</span>
-          <span className="summaryChip active">Active: {statusSummary.active}</span>
-          <span className="summaryChip inactive">Inactive: {statusSummary.inactive}</span>
-        </div>
+      <div className="summaryChips compactSummaryRow" aria-label="Rules summary">
+        <span className="summaryChip">Total rules: {statusSummary.total}</span>
+        <span className="summaryChip active">Active: {statusSummary.active}</span>
+        <span className="summaryChip inactive">Inactive: {statusSummary.inactive}</span>
+        <span className="subtle">{status}</span>
       </div>
 
-      <div className="note">
+      <div className="note compactNote">
         Digit is structurally tied to one option name across all rows (active + inactive). Code values are case-insensitive and normalized to uppercase.
       </div>
 
@@ -145,13 +140,12 @@ export default function SkuDefinitionPage() {
         </div>
       ) : null}
 
-      <div className="card addRuleCard">
+      <div className="card addRuleCard compactCard">
         <div className="cardHeader">
           <div>
             <h3>Add SKU rule</h3>
             <p className="subtle">Fields marked * are required.</p>
           </div>
-          <span className="subtle">{status}</span>
         </div>
         <div className="addRuleGrid">
           <label>
@@ -199,7 +193,7 @@ export default function SkuDefinitionPage() {
         {knownDigitOptionName ? <div className="subtle">Digit {form.digit_position} already uses option “{knownDigitOptionName}”; option is locked.</div> : null}
       </div>
 
-      <div className="tableToolbar">
+      <div className="tableToolbar compactToolbar">
         <input
           placeholder="Search digit, option, code, choice, reason..."
           value={filters.search}
@@ -213,7 +207,7 @@ export default function SkuDefinitionPage() {
         <button onClick={resetFilters}>Reset filters</button>
       </div>
 
-      <div className="tableWrap">
+      <div className="tableWrap skuTableWrap">
         <table>
           <thead>
             <tr>
@@ -349,5 +343,4 @@ export default function SkuDefinitionPage() {
     </AdminPageShell>
   );
 }
-
 
