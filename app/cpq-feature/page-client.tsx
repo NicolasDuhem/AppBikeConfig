@@ -20,6 +20,9 @@ type ApiPayload = {
   diagnostics?: any;
   rows?: GeneratedRow[];
   pushed?: number;
+  skippedDuplicateSkuCount?: number;
+  skippedDuplicateSkus?: string[];
+  failedRows?: Array<{ skuCode: string; cpqRuleset: string; reason: string }>;
   dryRun?: boolean;
 };
 
@@ -152,7 +155,10 @@ export default function CpqFeatureClient() {
       return;
     }
 
-    setStatus(`Pushed ${payload.pushed || 0} row(s) to CPQ matrix.`);
+    const pushed = payload.pushed || 0;
+    const duplicateSkips = payload.skippedDuplicateSkuCount || 0;
+    const failedRows = Array.isArray(payload.failedRows) ? payload.failedRows.length : 0;
+    setStatus(`Push complete. Pushed: ${pushed}. Skipped duplicate SKU: ${duplicateSkips}. Failed rows: ${failedRows}.`);
   }
 
   return (

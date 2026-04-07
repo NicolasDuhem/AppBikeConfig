@@ -155,5 +155,8 @@ Then manually test:
 - Generation structure uses `digit_position + code_value` as the canonical key (`option_name + code_value` for digit `0` static attributes).
 - Description/choice text is display-only and does not determine structural validity.
 - Confirm import generation is scoped to the current `cpq_import_runs.id` via `cpq_import_rows`, preventing mixed historical rules across unrelated uploads.
+- Generation source is the current upload run rows (`cpq_import_rows`) including rows marked `imported` and rows skipped as rule duplicates (`skip_duplicate`), so generation is no longer blocked when `sku_rules` inserts are skipped for duplicates.
+- Rule-table duplicate handling remains at import stage (`sku_rules`) only; it does not block generation for that run.
+- Duplicate SKU code protection is enforced at push stage (`/api/cpq/push`) when creating CPQ matrix rows. Duplicate SKUs are skipped and reported in push summary output.
 - Latest active display value per structural key is selected using newest active `sku_rules.id` (because `sku_rules` currently has no `updated_at`/`created_at` columns).
 - Generation route always resolves with JSON success/error and updates `cpq_import_runs.current_phase` (`generating_combinations`, `generation_completed`, `generation_failed`) for diagnostics.

@@ -22,25 +22,28 @@ export async function GET(request: Request) {
     console.info('[CPQ_GENERATE] start', { runId, fileName: run.file_name });
 
     const importRows = await sql`
-      select row_number, digit_position, option_name, code_value
+      select row_number, digit_position, option_name, code_value, status, action_attempted
       from cpq_import_rows
       where import_run_id = ${runId}
-        and status = 'imported'
+        and (
+          status = 'imported'
+          or (status = 'skipped' and action_attempted = 'skip_duplicate')
+        )
       order by row_number
-    ` as Array<{ row_number: number; digit_position: number; option_name: string; code_value: string }>;
+    ` as Array<{ row_number: number; digit_position: number; option_name: string; code_value: string; status: string; action_attempted: string | null }>;
 
     if (!importRows.length) {
-      const diagnostics = { activeRowsConsidered: 0, digitGroups: [], combinationsProduced: 0, reason: 'no_imported_rows_for_run' };
+      const diagnostics = { activeRowsConsidered: 0, digitGroups: [], combinationsProduced: 0, reason: 'no_valid_rows_from_uploaded_csv' };
       await sql`
         update cpq_import_runs
         set current_phase = 'generation_failed',
             status = 'failed',
-            error_message = 'No imported rows available for this run',
+            error_message = 'No valid rows from uploaded CSV were available for generation',
             error_stack = ${JSON.stringify(diagnostics)},
             failed_at = now()
         where id = ${runId}
       `;
-      return NextResponse.json({ success: false, phase: 'generation_validation', error: 'No imported rows available for this run', diagnostics }, { status: 400 });
+      return NextResponse.json({ success: false, phase: 'generation_validation', error: 'No valid rows from uploaded CSV were available for generation', diagnostics }, { status: 400 });
     }
 
     const scopedKeySet = new Set(importRows.map((row) => `${Number(row.digit_position)}|${String(row.code_value || (Number(row.digit_position) === 0 ? '-' : '')).toUpperCase()}|${String(mapCsvOptionNameToCanonical(row.option_name) || row.option_name).toLowerCase()}`));
@@ -71,7 +74,12 @@ export async function GET(request: Request) {
       fileName: run.file_name
     });
 
-    console.info('[CPQ_GENERATE] scoped rows', { runId, importedRows: importRows.length, activeRowsConsidered: diagnostics.activeRowsConsidered });
+    console.info('[CPQ_GENERATE] scoped rows', {
+      runId,
+      runRowsConsidered: importRows.length,
+      duplicateRuleRowsIncluded: importRows.filter((row) => row.status === 'skipped' && row.action_attempted === 'skip_duplicate').length,
+      activeRowsConsidered: diagnostics.activeRowsConsidered
+    });
     console.info('[CPQ_GENERATE] digit groups', { runId, digitGroups: diagnostics.digitGroups });
     if (diagnostics.skippedRows.length) {
       console.warn('[CPQ_GENERATE] skipped rows', { runId, skippedRows: diagnostics.skippedRows.slice(0, 20), skippedCount: diagnostics.skippedRows.length });
