@@ -37,9 +37,9 @@ export default function FeatureFlagsClient() {
   }
 
   return (
-    <AdminPageShell title="Feature Flags" subtitle="Manage runtime feature rollout safely. Changes are audited with who and when.">
-      <div className="note">{status || 'Only sys_admin can view and modify feature flags.'}</div>
-      <div className="tableWrap">
+    <AdminPageShell title="Admin - Feature flag" subtitle="Manage runtime feature rollout safely. Changes are audited with who and when.">
+      <div className="note compactNote">{status || 'Only sys_admin can view and modify feature flags.'}</div>
+      <div className="tableWrap tableViewport">
         <table>
           <thead>
             <tr><th>Key</th><th>Name</th><th>Description</th><th>Enabled</th><th>Updated at</th><th>Updated by</th></tr>

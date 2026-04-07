@@ -2,29 +2,29 @@
 
 ## Overview
 
-This release adds a **feature-flagged** BDAM picture picker workflow to CPQ Matrix.
+This release adds a **feature-flagged** BDAM picture picker workflow to Sales - SKU vs Country (CPQ Matrix).
 
 - Feature flag key: `cpq_bdam_picture_picker`
 - Flag name: `CPQ BDAM Picture Picker`
-- Purpose: enable an iframe/manual asset-link workflow on CPQ Matrix rows, without any server-side BDAM API integration.
+- Purpose: enable an iframe/manual asset-link workflow on Sales - SKU vs Country (CPQ Matrix) rows, without any server-side BDAM API integration.
 
-When the flag is **OFF**, CPQ Matrix behavior remains unchanged.
+When the flag is **OFF**, Sales - SKU vs Country (CPQ Matrix) behavior remains unchanged.
 
-When the flag is **ON**, each CPQ Matrix row gets a `Pick picture` action that opens a shared modal.
+When the flag is **ON**, each Sales - SKU vs Country (CPQ Matrix) row gets a `Pick picture` action that opens a shared modal.
 
 ## Feature flag behavior and safety
 
 - `cpq_bdam_picture_picker = false`
   - no `Pick picture` row action
   - no picker modal entry point
-  - no CPQ Matrix behavior changes
+  - no Sales - SKU vs Country (CPQ Matrix) behavior changes
 - `cpq_bdam_picture_picker = true`
   - `Pick picture` row action available
   - user can open modal, browse BDAM in iframe, and manually capture asset details
 
 Only `sys_admin` can manage the flag from Feature Flags page/API, using existing feature-flag audit behavior (`feature_flag_audit`).
 
-## CPQ Matrix UX
+## Sales - SKU vs Country (CPQ Matrix) UX
 
 When enabled:
 

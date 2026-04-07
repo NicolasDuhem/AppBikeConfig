@@ -8,7 +8,7 @@ type NavLink = { href: string; label: string; hidden?: boolean };
 
 export default function AppNavigation() {
   const pathname = usePathname();
-  const [links, setLinks] = useState<NavLink[]>([{ href: '/matrix', label: 'Matrix' }, { href: '/sku-definition', label: 'Bike SKU Definition' }, { href: '/bike-builder', label: 'Bike Builder' }, { href: '/users', label: 'Users' }]);
+  const [links, setLinks] = useState<NavLink[]>([{ href: '/matrix', label: 'Matrix' }, { href: '/sku-definition', label: 'Product - SKU definition' }, { href: '/bike-builder', label: 'Bike Builder' }, { href: '/users', label: 'Admin - Users' }]);
 
   useEffect(() => {
     fetch('/api/feature-flags/public')
@@ -18,12 +18,12 @@ export default function AppNavigation() {
         const cpqEnabled = !!data.import_csv_cpq;
 
         const next: NavLink[] = [
-          { href: cpqEnabled ? '/cpq-matrix' : '/matrix', label: cpqEnabled ? 'CPQ Matrix' : 'Matrix' },
-          { href: '/sku-definition', label: 'Bike SKU Definition' },
+          { href: cpqEnabled ? '/cpq-matrix' : '/matrix', label: cpqEnabled ? 'Sales - SKU vs Country' : 'Matrix' },
+          { href: '/sku-definition', label: 'Product - SKU definition' },
           { href: '/bike-builder', label: 'Bike Builder', hidden: cpqEnabled },
-          { href: '/cpq-feature', label: 'CPQ Feature', hidden: !cpqEnabled },
-          { href: '/users', label: 'Users' },
-          { href: '/feature-flags', label: 'Feature Flags', hidden: !roleList.includes('sys_admin') }
+          { href: '/cpq-feature', label: 'Product - Create SKU from CPQ file', hidden: !cpqEnabled },
+          { href: '/users', label: 'Admin - Users' },
+          { href: '/feature-flags', label: 'Admin - Feature flag', hidden: !roleList.includes('sys_admin') }
         ];
         setLinks(next);
       })

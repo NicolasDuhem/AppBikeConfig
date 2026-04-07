@@ -1,6 +1,6 @@
 # AppBikeConfig
 
-Next.js 14 App Router + Neon Postgres app for Matrix, Order, Setup, Bike SKU Definition, and Bike Builder with mandatory login + role-based access control (RBAC).
+Next.js 14 App Router + Neon Postgres app for Matrix, Order, Setup, Product - SKU definition, and Bike Builder with mandatory login + role-based access control (RBAC).
 
 ## Stack
 

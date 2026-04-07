@@ -91,14 +91,14 @@ export default function UsersPage() {
     await load();
   }
 
-  if (!loaded) return <AdminPageShell title="Users" subtitle="Manage AppBikeConfig user access."><div className="note">Loading...</div></AdminPageShell>;
-  if (!allowed) return <AdminPageShell title="Users" subtitle="Manage AppBikeConfig user access."><div className="note">Only sys_admin can manage users.</div></AdminPageShell>;
+  if (!loaded) return <AdminPageShell title="Admin - Users" subtitle="Manage AppBikeConfig user access."><div className="note compactNote">Loading...</div></AdminPageShell>;
+  if (!allowed) return <AdminPageShell title="Admin - Users" subtitle="Manage AppBikeConfig user access."><div className="note compactNote">Only sys_admin can manage users.</div></AdminPageShell>;
 
   return (
-    <AdminPageShell title="Users" subtitle="Create users, assign roles, and activate/deactivate accounts.">
-      <div className="note">Create users, assign roles, and activate/deactivate accounts.</div>
+    <AdminPageShell title="Admin - Users" subtitle="Create users, assign roles, and activate/deactivate accounts.">
+      <div className="note compactNote">Create users, assign roles, and activate/deactivate accounts.</div>
 
-      <div className="card" style={{ marginBottom: 12, display: 'grid', gap: 8 }}>
+      <div className="card compactCard" style={{ marginBottom: 6, display: 'grid', gap: 8 }}>
         <input placeholder="Email" value={form.email} onChange={(e) => setForm((v) => ({ ...v, email: e.target.value }))} />
         <input placeholder="Initial password" type="password" value={form.password} onChange={(e) => setForm((v) => ({ ...v, password: e.target.value }))} />
         <div className="listBox">
@@ -126,7 +126,7 @@ export default function UsersPage() {
         <button className="primary" onClick={createUser}>Create user</button>
       </div>
 
-      <div className="tableWrap">
+      <div className="tableWrap tableViewport">
         <table>
           <thead><tr><th>Email</th><th>Active</th><th>Roles</th><th>Toggle Active</th></tr></thead>
           <tbody>
