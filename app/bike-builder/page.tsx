@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import type { SkuRule } from '@/lib/types';
+import AdminPageShell from '@/components/admin/admin-page-shell';
 
 type GeneratedRow = {
   key: string;
@@ -97,8 +98,7 @@ export default function BikeBuilderPage() {
 
   const canPush = permissions.includes('builder.push');
 
-  return <div className="page">
-    <h2>Bike Builder</h2>
+  return <AdminPageShell title="Bike Builder" subtitle="Legacy builder flow. Hidden when Import CSV CPQ flag is enabled.">
     <div className="note">Only active SKU definition choices are shown in this builder.</div>
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(220px, 1fr))', gap: 12, marginBottom: 14 }}>
       {Object.entries(grouped).map(([option, optionRules]) => <div key={option} className="card">
@@ -128,5 +128,5 @@ export default function BikeBuilderPage() {
       <thead><tr><th>Pick</th><th>SKU</th><th>Bike type</th><th>Handlebar</th><th>Speed</th><th>Rack</th><th>Colour</th><th>Light</th><th>Seatpost</th><th>Saddle</th><th>Description</th></tr></thead>
       <tbody>{generated.map((row) => <tr key={row.key}><td><input type="checkbox" checked={!!picked[row.key]} onChange={(e) => setPicked((v) => ({ ...v, [row.key]: e.target.checked }))} /></td><td>{row.sku_code}</td><td>{row.bike_type}</td><td>{row.handlebar}</td><td>{row.speed}</td><td>{row.rack}</td><td>{row.colour}</td><td>{row.light}</td><td>{row.seatpost_length}</td><td>{row.saddle}</td><td>{row.description}</td></tr>)}</tbody>
     </table></div>
-  </div>;
+  </AdminPageShell>;
 }

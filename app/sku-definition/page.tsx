@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { SkuDigitIssue, SkuRule } from '@/lib/types';
 import { defaultRuleFilters, filterSkuRules, getRuleActionLabel, type RuleFilters } from '@/lib/sku-rule-filters';
+import AdminPageShell from '@/components/admin/admin-page-shell';
 
 export default function SkuDefinitionPage() {
   const [rules, setRules] = useState<SkuRule[]>([]);
@@ -91,7 +92,8 @@ export default function SkuDefinitionPage() {
   };
 
   return (
-    <div className="page skuPage">
+    <AdminPageShell title="Bike SKU Definition" subtitle="Manage SKU definition rules, lifecycle, and activation safety.">
+    <div className="skuPage">
       <div className="pageHeader">
         <div>
           <h2>Bike SKU Definition</h2>
@@ -293,5 +295,6 @@ export default function SkuDefinitionPage() {
         </div>
       ) : null}
     </div>
+    </AdminPageShell>
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import AdminPageShell from '@/components/admin/admin-page-shell';
 
 type AppUserRow = { id: number; email: string; is_active: boolean; roles: string[] };
 type Role = { id: number; role_key: string; role_name: string };
@@ -90,12 +91,11 @@ export default function UsersPage() {
     await load();
   }
 
-  if (!loaded) return <div className="page"><h2>User Management</h2><div className="note">Loading...</div></div>;
-  if (!allowed) return <div className="page"><h2>User Management</h2><div className="note">Only sys_admin can manage users.</div></div>;
+  if (!loaded) return <AdminPageShell title="Users" subtitle="Manage AppBikeConfig user access."><div className="note">Loading...</div></AdminPageShell>;
+  if (!allowed) return <AdminPageShell title="Users" subtitle="Manage AppBikeConfig user access."><div className="note">Only sys_admin can manage users.</div></AdminPageShell>;
 
   return (
-    <div className="page">
-      <h2>User Management</h2>
+    <AdminPageShell title="Users" subtitle="Create users, assign roles, and activate/deactivate accounts.">
       <div className="note">Create users, assign roles, and activate/deactivate accounts.</div>
 
       <div className="card" style={{ marginBottom: 12, display: 'grid', gap: 8 }}>
@@ -141,6 +141,6 @@ export default function UsersPage() {
           </tbody>
         </table>
       </div>
-    </div>
+    </AdminPageShell>
   );
 }
