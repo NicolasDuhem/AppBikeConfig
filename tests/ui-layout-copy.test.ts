@@ -13,7 +13,7 @@ const styles = readFileSync('app/globals.css', 'utf8');
 test('navigation labels use new page naming', () => {
   assert.match(navigation, /Sales - SKU vs Country/);
   assert.match(navigation, /Product - SKU definition/);
-  assert.match(navigation, /Product - Create SKU from CPQ file/);
+  assert.match(navigation, /Product - Create SKU/);
   assert.match(navigation, /Admin - Users/);
   assert.match(navigation, /Admin - Feature flag/);
 });
@@ -21,7 +21,7 @@ test('navigation labels use new page naming', () => {
 test('main pages expose renamed titles', () => {
   assert.match(matrixPage, /title="Sales - SKU vs Country"/);
   assert.match(skuPage, /title="Product - SKU definition"/);
-  assert.match(cpqFeaturePage, /title="Product - Create SKU from CPQ file"/);
+  assert.match(cpqFeaturePage, /title="Product - Create SKU"/);
   assert.match(usersPage, /title="Admin - Users"/);
   assert.match(featureFlagsPage, /title="Admin - Feature flag"/);
 });
@@ -35,4 +35,11 @@ test('table-first layout keeps scrollable table viewport and filter toggles', ()
   assert.match(styles, /\.adminPage \{[\s\S]*overflow:hidden;/);
   assert.match(styles, /\.tableViewport \{[\s\S]*flex:1;/);
   assert.match(styles, /\.tableWrap \{[\s\S]*overflow:auto;/);
+});
+
+
+test('product create sku page is DB-selection driven', () => {
+  assert.match(cpqFeaturePage, /Digit-based options \(1-30\)/);
+  assert.match(cpqFeaturePage, /Generate/);
+  assert.doesNotMatch(cpqFeaturePage, /Import CSV/);
 });
