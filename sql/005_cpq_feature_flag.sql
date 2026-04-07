@@ -32,7 +32,15 @@ create table if not exists cpq_import_runs (
   rows_imported integer not null default 0,
   rows_skipped integer not null default 0,
   rows_deactivated integer not null default 0,
-  rows_inserted integer not null default 0
+  rows_inserted integer not null default 0,
+  status text not null default 'created' check (status in ('created', 'completed', 'failed')),
+  current_phase text,
+  error_message text,
+  error_stack text,
+  failed_at timestamptz,
+  started_at timestamptz not null default now(),
+  completed_at timestamptz,
+  is_dry_run boolean not null default false
 );
 
 create table if not exists cpq_import_rows (
@@ -45,6 +53,11 @@ create table if not exists cpq_import_rows (
   code_value text,
   status text not null check (status in ('imported', 'skipped', 'error')),
   reason text,
+  raw_option_name text,
+  raw_digit text,
+  raw_code_value text,
+  normalized_option_name text,
+  action_attempted text,
   created_at timestamptz not null default now()
 );
 
