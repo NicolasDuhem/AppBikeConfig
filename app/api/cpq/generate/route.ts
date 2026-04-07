@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { requireApiRole } from '@/lib/api-auth';
 import { sql } from '@/lib/db';
 import { buildCpqCombinationsDetailed, CPQ_COLUMNS, mapOptionNameToCanonical, normalizeCharacter17 } from '@/lib/cpq-core';
-import type { SkuRule } from '@/lib/types';
 
 type SelectedDigitChoice = {
   digitPosition: number;
@@ -194,19 +193,24 @@ export async function GET(request: Request) {
     }
 
     const scopedKeySet = new Set(importRows.map((row) => `${Number(row.digit_position)}|${String(row.code_value || (Number(row.digit_position) === 0 ? '-' : '')).toUpperCase()}|${String(mapOptionNameToCanonical(row.option_name) || row.option_name).toLowerCase()}`));
-    const activeRules = await sql`
-      select id, digit_position, option_name, code_value, choice_value, description_element, is_active, deactivated_at, deactivation_reason
-      from sku_rules
-      where is_active = true
+    const canonicalRows = await sql`
+      select id, digit_position, option_name, code_value, choice_value,
+             null::text as description_element,
+             coalesce(is_active, true) as is_active,
+             deactivated_at,
+             deactivation_reason
+      from cpq_import_rows
+      where status = 'imported'
+        and coalesce(is_active, true) = true
       order by id desc
-    ` as SkuRule[];
+    ` as any[];
 
-    const scopedRulesByKey = new Map<string, SkuRule>();
-    for (const rule of activeRules) {
-      const canonicalOption = mapOptionNameToCanonical(rule.option_name) || rule.option_name;
-      const scopedKey = `${Number(rule.digit_position)}|${String(rule.code_value || '').toUpperCase()}|${String(canonicalOption).toLowerCase()}`;
+    const scopedRulesByKey = new Map<string, any>();
+    for (const row of canonicalRows) {
+      const canonicalOption = mapOptionNameToCanonical(row.option_name) || row.option_name;
+      const scopedKey = `${Number(row.digit_position)}|${String(row.code_value || '').toUpperCase()}|${String(canonicalOption).toLowerCase()}`;
       if (!scopedKeySet.has(scopedKey)) continue;
-      if (!scopedRulesByKey.has(scopedKey)) scopedRulesByKey.set(scopedKey, { ...rule, option_name: canonicalOption });
+      if (!scopedRulesByKey.has(scopedKey)) scopedRulesByKey.set(scopedKey, { ...row, option_name: canonicalOption });
     }
 
     const scopedRules = Array.from(scopedRulesByKey.values()).sort((a, b) => Number(a.digit_position) - Number(b.digit_position) || String(a.code_value).localeCompare(String(b.code_value)));

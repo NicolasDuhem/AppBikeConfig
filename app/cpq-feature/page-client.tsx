@@ -9,8 +9,7 @@ import { rowMatchesMultiSelectFilters, toggleColumnVisibility } from '@/lib/admi
 type GeneratedRow = Record<string, any>;
 
 type DigitChoice = {
-  skuRuleId: number;
-  cpqImportRowId: number | null;
+  cpqImportRowId: number;
   codeValue: string;
   choiceValue: string;
 };

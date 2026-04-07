@@ -55,6 +55,7 @@ export default function UsersPage() {
   const [roles, setRoles] = useState<Role[]>([]);
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [allowed, setAllowed] = useState(false);
+  const [roleBaselines, setRoleBaselines] = useState<Record<string, string[]>>({});
   const [loaded, setLoaded] = useState(false);
   const [status, setStatus] = useState('');
   const [form, setForm] = useState({ email: '', password: '', role_keys: [] as string[] });
@@ -68,10 +69,17 @@ export default function UsersPage() {
       setLoaded(true);
       return;
     }
-    const [usersRes, rolesRes, permsRes] = await Promise.all([fetch('/api/users'), fetch('/api/roles'), fetch('/api/permissions')]);
+    const [usersRes, rolesRes, permsRes, baselineRes] = await Promise.all([fetch('/api/users'), fetch('/api/roles'), fetch('/api/permissions'), fetch('/api/role-permissions')]);
     setUsers(await usersRes.json());
     setRoles(await rolesRes.json());
-    setPermissions(await permsRes.json());
+    const perms = await permsRes.json();
+    setPermissions(perms);
+    const baselineRows = await baselineRes.json();
+    const grouped: Record<string, string[]> = {};
+    (baselineRows || []).forEach((row: any) => {
+      grouped[row.role_key] = [...(grouped[row.role_key] || []), row.permission_key];
+    });
+    setRoleBaselines(grouped);
     setLoaded(true);
   }
 
@@ -120,6 +128,17 @@ export default function UsersPage() {
     await load();
   }
 
+
+  async function saveRoleBaseline(roleKey: string, permissionKeys: string[]) {
+    const res = await fetch('/api/role-permissions', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role_key: roleKey, permission_keys: permissionKeys })
+    });
+    setStatus(res.ok ? `Role baseline updated for ${roleKey}.` : 'Role baseline update failed.');
+    await load();
+  }
+
   const roleOptions = useMemo(() => roles.map((role) => role.role_key), [roles]);
 
   if (!loaded) return <AdminPageShell title="Admin - Users" subtitle="Manage AppBikeConfig user access."><div className="note compactNote">Loading...</div></AdminPageShell>;
@@ -156,6 +175,37 @@ export default function UsersPage() {
           })}
         </div>
         <button className="primary" onClick={createUser}>Create user</button>
+      </div>
+
+
+      <div className="card compactCard compactSection">
+        <div className="filtersHeader"><strong>Standard role base (role → permissions)</strong></div>
+        <div className="tableWrap" style={{ maxHeight: 280 }}>
+          <table>
+            <thead><tr><th>Role</th><th>Baseline permissions</th><th>Save</th></tr></thead>
+            <tbody>
+              {roleOptions.map((roleKey) => (
+                <tr key={`baseline-${roleKey}`}>
+                  <td className="emphasis">{roleKey}</td>
+                  <td>
+                    <select
+                      multiple
+                      className="multiSelect"
+                      value={roleBaselines[roleKey] || []}
+                      onChange={(e) => {
+                        const selected = Array.from(e.target.selectedOptions).map((option) => option.value);
+                        setRoleBaselines((curr) => ({ ...curr, [roleKey]: selected }));
+                      }}
+                    >
+                      {permissions.map((permission) => <option key={`${roleKey}-${permission.permission_key}`} value={permission.permission_key}>{permission.permission_key}</option>)}
+                    </select>
+                  </td>
+                  <td><button onClick={() => saveRoleBaseline(roleKey, roleBaselines[roleKey] || [])}>Save baseline</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="tableWrap tableViewport">

@@ -4,12 +4,11 @@ import { sql } from '@/lib/db';
 import { mapOptionNameToCanonical } from '@/lib/cpq-core';
 
 type RawOptionRow = {
-  sku_rule_id: number;
+  cpq_import_row_id: number;
   digit_position: number;
   option_name: string;
   code_value: string;
   choice_value: string;
-  cpq_import_row_id: number | null;
 };
 
 function canonicalOptionName(optionName: string) {
@@ -23,18 +22,14 @@ export async function GET() {
   const [rawRows, configs, rules] = await Promise.all([
     sql`
       select
-        r.id as sku_rule_id,
+        r.id as cpq_import_row_id,
         r.digit_position,
         r.option_name,
         r.code_value,
-        r.choice_value,
-        ir.id as cpq_import_row_id
-      from sku_rules r
-      left join cpq_import_rows ir
-        on ir.status = 'imported'
-       and lower(ir.option_name) = lower(r.option_name)
-       and lower(ir.choice_value) = lower(r.choice_value)
-      where r.is_active = true
+        r.choice_value
+      from cpq_import_rows r
+      where r.status = 'imported'
+        and coalesce(r.is_active, true) = true
       order by r.digit_position, r.option_name, r.code_value, r.id desc
     `,
     sql`select digit_position, option_name, is_required, selection_mode, is_active from sku_digit_option_config where is_active = true order by digit_position`,
@@ -53,7 +48,7 @@ export async function GET() {
     });
   }
 
-  const digitOptionGroups = new Map<number, { digitPosition: number; optionName: string; isRequired: boolean; selectionMode: 'single' | 'multi'; choices: Array<{ skuRuleId: number; cpqImportRowId: number | null; codeValue: string; choiceValue: string }> }>();
+  const digitOptionGroups = new Map<number, { digitPosition: number; optionName: string; isRequired: boolean; selectionMode: 'single' | 'multi'; choices: Array<{ cpqImportRowId: number; codeValue: string; choiceValue: string }> }>();
 
   for (const row of rows) {
     const optionName = canonicalOptionName(String(row.option_name || '').trim());
@@ -76,8 +71,7 @@ export async function GET() {
     if (existingGroup) {
       if (!existingGroup.choices.some((choice) => choice.codeValue === codeValue)) {
         existingGroup.choices.push({
-          skuRuleId: Number(row.sku_rule_id),
-          cpqImportRowId: row.cpq_import_row_id ? Number(row.cpq_import_row_id) : null,
+          cpqImportRowId: Number(row.cpq_import_row_id),
           codeValue,
           choiceValue
         });
@@ -91,8 +85,7 @@ export async function GET() {
       isRequired: digitConfig?.is_required || false,
       selectionMode: digitConfig?.selection_mode || 'multi',
       choices: [{
-        skuRuleId: Number(row.sku_rule_id),
-        cpqImportRowId: row.cpq_import_row_id ? Number(row.cpq_import_row_id) : null,
+        cpqImportRowId: Number(row.cpq_import_row_id),
         codeValue,
         choiceValue
       }]
