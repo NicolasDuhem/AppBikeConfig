@@ -45,3 +45,12 @@ export type SkuDigitIssue = {
   digit_position: number;
   option_names: string[];
 };
+
+
+export type BrakeType = 'reverse' | 'non_reverse';
+export type CpqCountry = { id: number; country: string; region: string; brake_type: BrakeType };
+export type CpqMatrixRow = MatrixRow & {
+  cpq_rule_id: number;
+  cpq_ruleset: string;
+  brake_type: BrakeType;
+};

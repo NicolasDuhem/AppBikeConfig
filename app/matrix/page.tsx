@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import type { Country, MatrixRow } from '@/lib/types';
 import AdminPageShell from '@/components/admin/admin-page-shell';
 
@@ -67,6 +68,7 @@ function deriveDescription(row: MatrixClientRow) {
 }
 
 export default function MatrixPage() {
+  const router = useRouter();
   const [rows, setRows] = useState<MatrixClientRow[]>([]);
   const [countries, setCountries] = useState<Country[]>([]);
   const [permissions, setPermissions] = useState<string[]>([]);
@@ -87,7 +89,12 @@ export default function MatrixPage() {
   const canBulkUpdate = permissions.includes('matrix.update.bulk');
 
   const load = useCallback(async () => {
-    const [res, meRes] = await Promise.all([fetch('/api/matrix'), fetch('/api/me')]);
+    const [flagsRes, res, meRes] = await Promise.all([fetch('/api/feature-flags/public'), fetch('/api/matrix'), fetch('/api/me')]);
+    const flags = await flagsRes.json();
+    if (flags.import_csv_cpq) {
+      router.replace('/cpq-matrix');
+      return;
+    }
     const data = await res.json();
     const me = await meRes.json();
     const loadedRows = (data.rows || []).map((row: MatrixRow) => ({
@@ -101,7 +108,7 @@ export default function MatrixPage() {
     setPermissions(me.permissions || []);
     setSelectedKeys(new Set());
     setDirtyKeys({});
-  }, []);
+  }, [router]);
 
   useEffect(() => { load(); }, [load]);
 

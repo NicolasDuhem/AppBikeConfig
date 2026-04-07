@@ -120,3 +120,4 @@ th { position:sticky; top:0; background:#f8faff; z-index:1; }
 
 .adminPage .pageHeader h2 { margin: 0 0 6px; }
 .adminContent { display: grid; gap: 12px; }
+.countryBlocked { background:#eceff5; color:#6d7892; border-color:#c5cede; cursor:not-allowed; opacity:0.8; }
