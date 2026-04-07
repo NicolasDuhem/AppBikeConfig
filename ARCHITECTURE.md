@@ -1226,3 +1226,30 @@ Current CPQ flow differs from legacy import behaviour by:
 - Non-static rows require one-character alphanumeric code (`A-Z0-9`).
 - Digit-0 rows require `Value` as `-`.
 - Unknown option names are skipped (not fatal) and reported.
+
+---
+
+## CPQ Normalization Architecture (2026 refactor)
+
+To remove duplicated CPQ text blobs and make localization + future options scalable, CPQ now uses `cpq_import_rows` as the canonical source for option values.
+
+### Why normalization was introduced
+- CPQ values were duplicated in multiple text columns across CPQ tables.
+- Any wording change required schema-coupled updates and hardcoded read logic.
+- Translations were not first-class and could not be attached to one canonical value safely.
+
+### Canonical model
+- `cpq_import_rows`: canonical option/choice rows (source of truth for CPQ choice values).
+- `cpq_product_attributes`: one row per `(cpq_product_id, option_name)` pointing to `cpq_import_rows.id`.
+- `cpq_import_row_translations`: localized labels per canonical import row, unique by `(cpq_import_row_id, locale)`.
+
+### Backward compatibility during rollout
+- Legacy text columns in `cpq_products` remain present but are deprecated.
+- Read paths use normalized joins first and then coalesce to legacy columns as fallback.
+- Write paths now persist attributes through `cpq_product_attributes` references.
+
+### Rollout phases
+1. Add new normalized tables/indexes and backfill from existing `cpq_products` values.
+2. Switch reads (e.g. Sales - SKU vs Country) to join-based normalized source.
+3. Switch writes (CPQ push/generation persistence) to normalized attribute references.
+4. Keep legacy columns as deprecated compatibility layer until production verification is complete, then remove legacy usage in a follow-up migration.
