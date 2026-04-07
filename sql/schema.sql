@@ -42,9 +42,13 @@ create table if not exists sku_rules (
   deactivation_reason text
 );
 
-create unique index if not exists sku_rules_active_digit_code_uniq
+create unique index if not exists sku_rules_active_digit_code_nonzero_uniq
   on sku_rules (digit_position, upper(code_value))
-  where is_active = true;
+  where is_active = true and digit_position > 0;
+
+create unique index if not exists sku_rules_active_static_option_code_uniq
+  on sku_rules (lower(option_name), upper(code_value))
+  where is_active = true and digit_position = 0;
 
 create index if not exists sku_rules_active_lookup_idx
   on sku_rules (is_active, option_name, digit_position);
