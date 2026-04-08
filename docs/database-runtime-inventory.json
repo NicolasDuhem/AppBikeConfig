@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-04-08T11:19:00.519Z",
-  "object_count": 23,
+  "generated_at": "2026-04-08T12:28:29.164Z",
+  "object_count": 22,
   "objects": [
     {
       "object": "app_users",
@@ -22,8 +22,7 @@
     {
       "object": "countries",
       "discovered_from": [
-        "sql/006_cpq_matrix_tables.sql",
-        "sql/seed.sql"
+        "sql/006_cpq_matrix_tables.sql"
       ]
     },
     {
@@ -122,12 +121,6 @@
         "app/api/users/route.ts",
         "lib/auth.ts",
         "sql/012_permissions_and_sku_generation_config.sql",
-        "sql/seed.sql"
-      ]
-    },
-    {
-      "object": "products",
-      "discovered_from": [
         "sql/seed.sql"
       ]
     },
