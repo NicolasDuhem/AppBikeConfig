@@ -63,7 +63,7 @@ export type SkuRuleTranslationRow = {
 
 
 export type BrakeType = 'reverse' | 'non_reverse';
-export type CpqCountry = { id: number; country: string; region: string; brake_type: BrakeType };
+export type CpqCountry = { id: number; country: string; region: string; brake_type: BrakeType; locale_code?: string };
 export type CpqMatrixRow = MatrixRow & {
   cpq_rule_id: number;
   cpq_ruleset: string;

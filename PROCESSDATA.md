@@ -41,7 +41,7 @@ Runtime process/data-flow reference for AppBikeConfig.
 
 ### Primary setup path
 - UI/API: `/setup` + `/api/product-setup`.
-- Reads: `sku_digit_option_config`, `sku_generation_dependency_rules`, active digits from `cpq_import_rows`.
+- Reads: `sku_digit_option_config`, `sku_generation_dependency_rules`, active digits from `cpq_import_rows` (canonical option names remain source-of-truth in setup).
 - Writes: upsert `sku_digit_option_config`; replace/upsert `sku_generation_dependency_rules`.
 
 ### Legacy setup path
@@ -52,7 +52,9 @@ Runtime process/data-flow reference for AppBikeConfig.
 ## 6) CPQ generation and push
 
 ### `/api/cpq/options`
-- Reads active `cpq_import_rows` + setup metadata.
+- Reads active `cpq_import_rows` + setup metadata + optional locale overlays from `cpq_import_row_translations`.
+- Locale resolution order: `locale` query param (if managed), then country context (`country_id` or `country`) via `cpq_countries.locale_code`, then managed default locale (first configured, else `en-US`).
+- Fallback behavior: when translation is missing/blank, canonical `cpq_import_rows.choice_value` is returned.
 
 ### `/api/cpq/generate` POST
 - Reads setup metadata; in-memory generation; no writes.

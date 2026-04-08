@@ -20,7 +20,7 @@ export type CpqMatrixProductInput = {
 };
 
 export async function getCpqCountries() {
-  return await sql`select id, country, region, brake_type from cpq_countries order by region, country`;
+  return await sql`select id, country, region, brake_type, locale_code from cpq_countries order by region, country`;
 }
 
 export async function upsertCpqMatrixProduct(product: CpqMatrixProductInput, availability: Record<string, boolean>) {

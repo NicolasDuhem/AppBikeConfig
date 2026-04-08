@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import AdminPageShell from '@/components/admin/admin-page-shell';
 import { CPQ_COLUMNS } from '@/lib/cpq-core';
 import { safeReadJsonResponse } from '@/lib/http-json';
@@ -23,6 +23,15 @@ type DigitGroup = {
   choices: DigitChoice[];
 };
 
+
+const defaultProductOptions = {
+  productAssist: ['Electric', 'Non electric'],
+  productFamily: ['Bike', 'P&A'],
+  productLine: ['A Line', 'C Line', 'P Line', 'T Line', 'G Line'],
+  productType: ['Standard', 'Special edition'],
+  productModel: [] as string[]
+};
+
 function buildRowKey(row: GeneratedRow, index: number) {
   const skuCode = String(row['SKU code'] || '').trim();
   const description = String(row.Description || '').trim();
@@ -43,13 +52,10 @@ export default function CpqFeatureClient() {
   const [showDigitFilters, setShowDigitFilters] = useState(false);
   const [digitOptions, setDigitOptions] = useState<DigitGroup[]>([]);
   const [loadingOptions, setLoadingOptions] = useState(true);
-  const [productOptions, setProductOptions] = useState({
-    productAssist: ['Electric', 'Non electric'],
-    productFamily: ['Bike', 'P&A'],
-    productLine: ['A Line', 'C Line', 'P Line', 'T Line', 'G Line'],
-    productType: ['Standard', 'Special edition'],
-    productModel: [] as string[]
-  });
+  const [productOptions, setProductOptions] = useState(defaultProductOptions);
+  const [optionLocale, setOptionLocale] = useState('en-US');
+  const [availableLocales, setAvailableLocales] = useState<string[]>(['en-US']);
+  const [optionLocaleSource, setOptionLocaleSource] = useState<'request' | 'country' | 'default'>('default');
   const [form, setForm] = useState({
     cpqRuleset: '',
     productAssist: 'Non electric',
@@ -60,21 +66,30 @@ export default function CpqFeatureClient() {
   });
   const [selectedCodesByDigit, setSelectedCodesByDigit] = useState<Record<number, string[]>>({});
 
-  useEffect(() => {
-    (async () => {
-      setLoadingOptions(true);
-      const res = await fetch('/api/cpq/options');
-      const payload = await safeReadJsonResponse(res) as any;
-      if (!res.ok) {
-        setStatus(payload?.error || 'Failed to load options');
-        setLoadingOptions(false);
-        return;
-      }
-      setDigitOptions(Array.isArray(payload.digitOptions) ? payload.digitOptions : []);
-      setProductOptions(payload.productFieldOptions || productOptions);
+  const loadOptions = useCallback(async (requestedLocale: string) => {
+    setLoadingOptions(true);
+    const params = new URLSearchParams();
+    if (requestedLocale) params.set('locale', requestedLocale);
+    const res = await fetch(`/api/cpq/options?${params.toString()}`);
+    const payload = await safeReadJsonResponse(res) as any;
+    if (!res.ok) {
+      setStatus(payload?.error || 'Failed to load options');
       setLoadingOptions(false);
-    })();
+      return;
+    }
+    setDigitOptions(Array.isArray(payload.digitOptions) ? payload.digitOptions : []);
+    setProductOptions(payload.productFieldOptions || defaultProductOptions);
+    const resolvedLocale = String(payload.locale || requestedLocale || 'en-US');
+    const locales = Array.isArray(payload.locales) && payload.locales.length ? payload.locales : ['en-US'];
+    setOptionLocale(resolvedLocale);
+    setAvailableLocales(locales);
+    setOptionLocaleSource(payload.localeSource === 'request' || payload.localeSource === 'country' ? payload.localeSource : 'default');
+    setLoadingOptions(false);
   }, []);
+
+  useEffect(() => {
+    loadOptions('en-US');
+  }, [loadOptions]);
 
   const filterOptions = useMemo(() => Object.fromEntries(CPQ_COLUMNS.map((column) => {
     const values = Array.from(new Set(rows.map((row) => String(row[column] || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
@@ -179,6 +194,19 @@ export default function CpqFeatureClient() {
         <div className="matrixFilterGrid featureFilterGrid cpqMetaGrid">
           <label className="filterLabel">CPQ ruleset
             <input value={form.cpqRuleset} onChange={(e) => setForm((curr) => ({ ...curr, cpqRuleset: e.target.value }))} placeholder="e.g. C-Line-2026" />
+          </label>
+          <label className="filterLabel">Option locale
+            <select
+              value={optionLocale}
+              onChange={async (e) => {
+                const nextLocale = e.target.value;
+                setOptionLocale(nextLocale);
+                await loadOptions(nextLocale);
+              }}
+            >
+              {availableLocales.map((locale) => <option key={locale} value={locale}>{locale}</option>)}
+            </select>
+            <span className="subtle">Source: {optionLocaleSource === 'request' ? 'explicit selection' : optionLocaleSource === 'country' ? 'country default locale' : 'managed default locale'}</span>
           </label>
           <label className="filterLabel">ProductAssist
             <select value={form.productAssist} onChange={(e) => setForm((curr) => ({ ...curr, productAssist: e.target.value }))}>{productOptions.productAssist.map((v) => <option key={v}>{v}</option>)}</select>
