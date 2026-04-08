@@ -4,7 +4,7 @@
 
 Detailed operational process/data map for AppBikeConfig CPQ runtime, reconciled with CSV database truth.
 
-Date reconciled: **April 8, 2026** (cpq_products_flat fallback-reduction wave: product identity subset).
+Date reconciled: **April 8, 2026** (cpq_products_flat fallback-reduction wave: remaining compatibility subset).
 
 ---
 
@@ -64,7 +64,7 @@ Date reconciled: **April 8, 2026** (cpq_products_flat fallback-reduction wave: p
 ## 2.6 Push + matrix operations
 
 - `/api/cpq/push` writes `cpq_products`, `cpq_product_attributes`, `cpq_sku_rules`, `cpq_availability`.
-- In this wave, `cpq_products_flat` no longer falls back to raw `cpq_products` columns for `ProductAssist`/`ProductFamily`/`ProductLine`/`ProductModel`/`ProductType`; these values now resolve from normalized attributes only.
+- In this wave, `cpq_products_flat` no longer falls back to raw `cpq_products` payload columns for the remaining compatibility subset (`HandlebarType` through `FrontForkColour`); these projected values now resolve from normalized attributes only.
 - Prior wave behavior remains: push row creation no longer writes `cpq_products.brake_reverse` / `cpq_products.brake_non_reverse`; brake semantics remain represented via `cpq_product_attributes` (`BrakeReverse` / `BrakeNonReverse`) and `cpq_sku_rules.brake_type`.
 - `/api/cpq-matrix*` reads/writes matrix tables + availability + countries; optional assets flow reads/writes `cpq_product_assets`.
 - Matrix integrity depends on FK + domain checks in CPQ tables.
@@ -83,9 +83,9 @@ Date reconciled: **April 8, 2026** (cpq_products_flat fallback-reduction wave: p
 
 ## Safe now
 - Column cleanup in non-critical residue fields (`cpq_import_rows.raw_*`) is complete via explicit drop migration from prior wave.
-- `cpq_products.product_assist` + `product_family` + `product_line` + `product_model` + `product_type` were removed in this wave after detaching `cpq_products_flat` fallback for those fields.
-- `cpq_products.brake_reverse` + `cpq_products.brake_non_reverse` were removed in the prior wave; no runtime read path or `cpq_products_flat` fallback depends on these columns.
-- `cpq_products.position29` + `cpq_products.position30` were removed in the prior wave and remain absent.
+- Remaining fallback-coupled `cpq_products` columns were removed in this wave after detaching `cpq_products_flat` fallback for those fields (`handlebar_type`, `speeds`, `mudguardsandrack`, `territory`, `mainframecolour`, `rearframecolour`, `frontcarrierblock`, `lighting`, `saddleheight`, `gearratio`, `saddle`, `tyre`, `brakes`, `pedals`, `saddlebag`, `suspension`, `biketype`, `toolkit`, `saddlelight`, `configcode`, `optionbox`, `framematerial`, `frameset`, `componentcolour`, `onbikeaccessories`, `handlebarstemcolour`, `handlebarpincolour`, `frontframecolour`, `frontforkcolour`).
+- Prior wave removals remain: product identity columns in migration `018`, brake columns in migration `017`, position placeholders in migration `016`.
+- Compatibility residue intentionally left: `cpq_products.description` (separate follow-up candidate).
 - Documentation and baseline inventory alignment.
 
 ## Needs staged verification
@@ -94,7 +94,7 @@ Date reconciled: **April 8, 2026** (cpq_products_flat fallback-reduction wave: p
 - Full `sku_rules` retirement.
 
 ## Resolved in this run
-- Staged `cpq_products` cleanup by removing `cpq_products_flat` fallback for `ProductAssist`/`ProductFamily`/`ProductLine`/`ProductModel`/`ProductType` and dropping the matched legacy columns in migration `018`.
+- Completed final `cpq_products` fallback-coupled cleanup wave by removing `cpq_products_flat` fallback for the remaining compatibility subset and dropping the matched legacy columns in migration `019`.
 - `cpq_import_runs` status clarified as transitional diagnostics table that is still read/write-touched by generation lifecycle handling.
 
 ---
@@ -102,5 +102,5 @@ Date reconciled: **April 8, 2026** (cpq_products_flat fallback-reduction wave: p
 ## 5) Next operationally-safe action
 
 This run shipped one paired fallback-reduction/drop change and one sequencing decision:
-1. Remove `cpq_products_flat` fallback for `ProductAssist`/`ProductFamily`/`ProductLine`/`ProductModel`/`ProductType`, then drop matched `cpq_products` columns in migration `018_cpq_products_flat_remove_identity_fallback.sql`.
-2. Keep `cpq_import_runs` intact for now, and target a dedicated retirement run after run-creation and diagnostics ownership are redesigned.
+1. Remove remaining `cpq_products_flat` fallback for compatibility attributes (`HandlebarType` through `FrontForkColour`), then drop matched `cpq_products` columns in migration `019_cpq_products_flat_remove_remaining_fallback.sql`.
+2. Keep `cpq_import_runs` intact for now, and target a dedicated retirement-prep run next.
