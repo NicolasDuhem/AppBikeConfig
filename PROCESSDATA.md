@@ -2,203 +2,220 @@
 
 ## Purpose
 
-Runtime process/data-flow source-of-truth for AppBikeConfig after CPQ-only runtime cutover.
+Durable process/data-flow reference for **current CPQ-only runtime behavior**.
 
-This document describes:
-- current operational process flows,
-- data reads/writes per flow,
-- compatibility paths retained only for deprecation sequencing.
+This document captures:
+- active process entry points,
+- read/write tables per process,
+- validation and output behavior,
+- translation and country-locale runtime logic,
+- explicitly labeled historical context only where still relevant.
 
-> Rule: every data behavior change must update both `DATABASE.md` and `PROCESSDATA.md`.
+## 1) Runtime map
 
-## 1) Top-level runtime map (CPQ-only)
+### 1.1 Active user journeys
 
-### 1.1 Supported runtime user journey
+1. Authenticate.
+2. Maintain canonical options/translations in SKU definition.
+3. Configure generation behavior in Product - Setup.
+4. Generate combinations in Product - Create SKU.
+5. Push selected rows to CPQ matrix tables.
+6. Operate Sales - SKU vs Country matrix (single/bulk edits, BC checks, optional picture metadata).
 
-1. User authenticates.
-2. User navigates CPQ surfaces:
-   - Sales - SKU vs Country (`/cpq-matrix`)
-   - Product - Create SKU (`/cpq-feature`)
-   - Product - SKU definition (`/sku-definition`)
-   - Product - Setup (`/setup`)
-3. User generates/pushes CPQ products.
-4. User manages CPQ matrix and availability.
+### 1.2 Retired runtime behavior
 
-### 1.2 Retired runtime model
+The legacy Matrix / Product Legacy Builder branch model is retired.
 
-The historical dual-track routing model (`import_csv_cpq` ON/OFF switching between legacy and CPQ flows) is retired.
+- No runtime branch depends on `import_csv_cpq`.
+- `/matrix`, `/bike-builder`, and `/order` are redirects only.
+- Legacy APIs (`/api/matrix*`, `/api/builder-push`, `/api/countries`, `/api/setup-options`) were removed.
 
-Operationally:
-- CPQ flow is default and only supported runtime behavior.
-- Legacy UI pages are transition redirects, not equivalent runtime alternatives.
+## 2) Authentication and authorization flow
 
-## 2) Authentication and authorization
-
-- Trigger: login or protected API call.
 - Entry points: `lib/auth.ts`, `lib/api-auth.ts`, `/api/auth/[...nextauth]`.
-- Reads: `app_users`, `user_roles`, `roles`, `role_permissions`, `permissions`, `user_permissions`.
-- Writes: none in direct auth path.
-- Failure states: invalid credentials, inactive user, insufficient role/permission for endpoint.
+- Reads: `app_users`, `roles`, `user_roles`, `permissions`, `role_permissions`, `user_permissions`.
+- Writes: none in credential verification path.
+- Validation/failure outputs:
+  - invalid credentials/inactive user => auth failure,
+  - missing permission/role => API 403/redirect behavior.
 
-## 3) Feature flag processes (post-cutover semantics)
+## 3) Feature-flag and permission context
 
-### 3.1 Public flag context (`/api/feature-flags/public`)
+### 3.1 `/api/feature-flags/public`
+- Reads: `feature_flags` + effective user role/permission context.
+- Output:
+  - runtime flags used by client UX (`cpq_bdam_picture_picker`),
+  - role/permission payload for nav/action visibility.
 
-- Reads: `feature_flags` (runtime-relevant flags only), auth-derived roles/permissions.
-- Runtime effect:
-  - provides CPQ picture-picker gate (`cpq_bdam_picture_picker`),
-  - supplies roles/permissions for UI nav visibility.
-- Explicitly not used for CPQ-vs-legacy path switching.
-
-### 3.2 Admin flag mutation (`/api/feature-flags`)
-
+### 3.2 `/api/feature-flags`
 - Writes: `feature_flags`, `feature_flag_audit`.
-- Guardrails:
+- Validation:
   - requires `feature_flags.manage`.
-  - `import_csv_cpq` is treated as retired runtime switch and is no longer mutable for routing behavior.
+- Post-cutover rule:
+  - `import_csv_cpq` is historical and not a runtime path switch.
 
-## 4) SKU definition lifecycle (canonical CPQ)
+## 4) SKU definition and translation lifecycle
 
-- UI/API: `/sku-definition`, `/api/sku-rules`, `/api/sku-rule-translations`.
-- Reads:
-  - `cpq_import_rows` (canonical source),
-  - `cpq_import_row_translations` (locale overlays),
-  - `cpq_countries` (`locale_code` set of managed locales),
-  - `cpq_product_attributes` (delete guard),
-  - audit/user tables for attribution.
-- Writes:
-  - `cpq_import_rows`,
-  - `cpq_import_row_translations`,
-  - `audit_log`.
+### 4.1 Canonical option CRUD (`/api/sku-rules`)
 
-Behavior guarantees:
-- duplicate structural rows rejected,
-- delete blocked when active references exist,
-- translation values optional and fallback to canonical `choice_value`.
+Reads:
+- `cpq_import_rows`
+- `cpq_product_attributes` (delete guard)
+- auth attribution tables as needed
 
-## 5) Product setup lifecycle (canonical CPQ)
+Writes:
+- `cpq_import_rows`
+- `audit_log`
 
-### 5.1 Active setup flow
+Validation:
+- structural duplicate checks,
+- active/inactive lifecycle constraints,
+- deletion blocked when references remain.
 
-- UI/API: `/setup`, `/api/product-setup`.
-- Reads:
-  - `sku_digit_option_config`,
-  - `sku_generation_dependency_rules`,
-  - active digit context from `cpq_import_rows`.
-- Writes:
-  - upsert `sku_digit_option_config`,
-  - replace/upsert `sku_generation_dependency_rules`.
+Outputs:
+- canonical option rows plus mutation status/errors.
 
-### 5.2 Legacy setup API status
+### 4.2 Translation management (`/api/sku-rule-translations`)
 
-- `/api/setup-options` remains compatibility-only.
-- Not part of CPQ-only runtime standard flow.
-- Emits deprecation telemetry for residual usage tracking.
+Reads:
+- `cpq_import_rows`
+- `cpq_import_row_translations`
+- `cpq_countries` (managed locale set support)
+
+Writes:
+- `cpq_import_row_translations`
+- `audit_log`
+
+Validation:
+- translation keys must map to canonical rows,
+- locale-target updates preserve canonical fallback behavior.
+
+Outputs:
+- translation rows and operation diagnostics.
+
+## 5) Product setup lifecycle (`/api/product-setup`)
+
+Reads:
+- `sku_digit_option_config`
+- `sku_generation_dependency_rules`
+- active digit context from `cpq_import_rows`
+
+Writes:
+- upsert/replace behavior in `sku_digit_option_config`
+- upsert/replace behavior in `sku_generation_dependency_rules`
+
+Validation:
+- editable constraints by permission (`setup.manage`),
+- type/domain checks for digit positions and rule semantics.
+
+Outputs:
+- current setup state for UI hydration,
+- save results/errors for admin mutation.
 
 ## 6) CPQ generation flow
 
 ### 6.1 Option hydration (`/api/cpq/options`)
 
-- Reads:
-  - active `cpq_import_rows`,
-  - setup tables,
-  - optional `cpq_import_row_translations`,
-  - `cpq_countries` for locale resolution.
-- Locale resolution sequence:
-  1. explicit `locale` query (if managed),
-  2. country locale by `country_id`/`country`,
-  3. managed default locale (or `en-US`).
-- Output:
-  - generation option groups,
-  - localized choice labels where available.
+Reads:
+- active `cpq_import_rows`
+- setup tables
+- `cpq_import_row_translations` (optional overlay)
+- `cpq_countries` (locale resolution)
+
+Locale resolution order:
+1. explicit `locale` query (if managed),
+2. locale from country context (`country_id` or `country` -> `cpq_countries.locale_code`),
+3. managed default locale (fallback `en-US`).
+
+Output:
+- grouped generation options with translated labels where available.
 
 ### 6.2 Combination generation (`/api/cpq/generate` POST)
 
-- Reads setup + selected options.
-- Processing is in-memory.
-- No persistent writes.
+Reads:
+- request-selected choices,
+- setup constraints from `sku_digit_option_config` and `sku_generation_dependency_rules`.
 
-### 6.3 Import-run diagnostics (`/api/cpq/generate` GET with `run_id`)
+Writes:
+- none (in-memory generation).
 
-- Reads/Writes: `cpq_import_runs` status/phase fields and read context from `cpq_import_rows`.
-- Treated as diagnostics/transitional behavior.
+Validation:
+- required digit coverage,
+- single/multi selection mode compliance,
+- dependency-rule compatibility.
+
+Output:
+- generated combination rows or validation errors.
+
+### 6.3 Import-run diagnostics (`/api/cpq/generate` GET)
+
+Reads/Writes:
+- `cpq_import_runs` phase/status updates,
+- scoped reads from `cpq_import_rows`.
+
+Role:
+- transitional diagnostics/observability path (not primary user journey).
 
 ## 7) CPQ push flow (`/api/cpq/push`)
 
-- Inputs: generated rows + selected brake mode.
-- Writes:
-  - `cpq_products`,
-  - `cpq_product_attributes`,
-  - `cpq_sku_rules`,
-  - `cpq_availability`,
-  - optional canonical backfill rows in `cpq_import_rows` when required.
-- Consistency controls:
-  - request-level dedupe,
-  - DB uniqueness enforcement,
-  - duplicate handling/rollback behavior around active rule collisions.
+Inputs:
+- generated rows + selected brake mode/scope.
 
-## 8) CPQ matrix flow (Sales - SKU vs Country)
+Writes:
+- `cpq_products`
+- `cpq_product_attributes`
+- `cpq_sku_rules`
+- `cpq_availability`
+- optional canonical support writes to `cpq_import_rows`
+- `audit_log`
 
-### 8.1 Read path (`/api/cpq-matrix`)
+Validation/consistency:
+- request-level dedupe,
+- active-rule uniqueness enforcement,
+- duplicate SKU handling and row-level skip/failure reporting.
 
-- Reads:
-  - `cpq_sku_rules`,
-  - `cpq_products_flat`,
-  - `cpq_availability`,
-  - `cpq_countries`,
-  - optional `cpq_product_assets`.
+Outputs:
+- push summary with succeeded/skipped/failed diagnostics.
 
-### 8.2 Write/mutation paths
+## 8) CPQ matrix lifecycle (`/api/cpq-matrix*`)
 
-- `/api/cpq-matrix/save-all`:
-  - updates CPQ matrix row values and availability state.
-- `/api/cpq-matrix/bulk-update`:
-  - mass country assignment/removal with brake-type compatibility checks.
-- `/api/cpq-matrix/check-bc-status`:
-  - validates SKU existence/status against BigCommerce and updates status fields.
-- `/api/cpq-matrix/picture`:
-  - writes `cpq_product_assets` metadata, gated by `cpq_bdam_picture_picker` behavior.
+### 8.1 Read (`/api/cpq-matrix`)
 
-### 8.3 UX/runtime expectations
+Reads:
+- `cpq_sku_rules`
+- `cpq_products_flat`
+- `cpq_availability`
+- `cpq_countries`
+- optional `cpq_product_assets`
 
-- This is the canonical and only supported Sales SKU-vs-country operational surface.
-- Legacy matrix is no longer a standard runtime alternative.
+Output:
+- matrix rows, country metadata, and row-country availability map.
 
-## 9) Navigation and routing behavior after cutover
+### 8.2 Mutations
 
-- `/` -> `/cpq-matrix`
-- `/matrix` -> redirect to `/cpq-matrix`
-- `/bike-builder` -> redirect to `/cpq-feature`
-- CPQ pages no longer branch behavior using `import_csv_cpq`.
+- `/api/cpq-matrix/save-all`: row edits + availability updates.
+- `/api/cpq-matrix/bulk-update`: country assignment/removal across selected rows.
+- `/api/cpq-matrix/check-bc-status`: BigCommerce SKU verification + status persistence.
+- `/api/cpq-matrix/picture`: picture metadata writes to `cpq_product_assets` (flag-gated).
 
-This removes route-level dual-path behavior while preserving safe transition entry for old bookmarks.
+Validation highlights:
+- permission-specific write guards,
+- brake-type compatibility checks before assigning countries,
+- external BC check error handling with partial-success style responses.
 
-## 10) Compatibility/deprecation flows still present
+## 9) Historical context (explicitly non-runtime)
 
-The following may remain callable for transition safety but are not runtime-standard behavior:
+Removed from runtime code in this repo:
+- `/api/matrix*`
+- `/api/builder-push`
+- `/api/countries`
+- `/api/setup-options`
+- legacy matrix service/helper code
 
-- Legacy matrix APIs: `/api/matrix`, `/api/matrix/save-all`, `/api/matrix/bulk-update`, `/api/matrix/check-bc-status`
-- Legacy builder API: `/api/builder-push`
-- Legacy countries API: `/api/countries`
-- Legacy setup API: `/api/setup-options`
+Legacy DB tables remain physically present in migrations/schema but are no longer read/written by active runtime paths.
 
-All are compatibility/deprecation scope and should be treated as do-not-extend surfaces.
+## 10) Supporting artifacts
 
-## 11) Observability and deprecation telemetry
-
-- `deprecation.path_invoked` events continue to flow to `audit_log` for compatibility endpoints.
-- Telemetry supports Run 2 deletion sequencing by identifying residual external usage.
-
-## 12) Run 2 cleanup map
-
-Expected deeper cleanup pass:
-- delete compatibility legacy APIs once telemetry confirms no required consumers,
-- remove legacy table dependencies and dead service code,
-- retire deprecation telemetry scaffolding tied only to removed endpoints,
-- finalize docs to move legacy objects from compatibility -> historical/removed.
-
-## 13) Supporting artifacts
-
-- Structured runtime flow map: `docs/process-impact-map.md`
-- Legacy retirement sequencing context: `docs/legacy-deprecation-plan.md`
-- DB runtime inventory companion: `docs/database-runtime-inventory.md`
+- `docs/process-impact-map.md`
+- `docs/database-runtime-inventory.md`
+- `docs/generated/db-usage-report.md`
