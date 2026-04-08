@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import AdminPageShell from '@/components/admin/admin-page-shell';
 import { CPQ_COLUMNS } from '@/lib/cpq-core';
 import { safeReadJsonResponse } from '@/lib/http-json';
 import { rowMatchesMultiSelectFilters, toggleColumnVisibility } from '@/lib/admin-table-ui';
 
 type GeneratedRow = Record<string, any>;
+type GeneratedRowWithKey = GeneratedRow & { _rowKey: string };
 
 type DigitChoice = {
   cpqImportRowId: number;
@@ -22,19 +23,24 @@ type DigitGroup = {
   choices: DigitChoice[];
 };
 
-function selectedValues(event: ChangeEvent<HTMLSelectElement>) {
-  return Array.from(event.target.selectedOptions).map((option) => option.value);
+function buildRowKey(row: GeneratedRow, index: number) {
+  const skuCode = String(row['SKU code'] || '').trim();
+  const description = String(row.Description || '').trim();
+  if (skuCode) return `${skuCode}-${index}`;
+  return `${description || 'row'}-${index}`;
 }
 
 export default function CpqFeatureClient() {
-  const [rows, setRows] = useState<GeneratedRow[]>([]);
-  const [picked, setPicked] = useState<Record<number, boolean>>({});
+  const [rows, setRows] = useState<GeneratedRowWithKey[]>([]);
+  const [pickedRowKeys, setPickedRowKeys] = useState<Set<string>>(new Set());
   const [status, setStatus] = useState('');
   const [filters, setFilters] = useState<Record<string, string[]>>({});
+  const [headerFilters, setHeaderFilters] = useState<Record<string, string>>({});
   const [filterSearch, setFilterSearch] = useState('');
   const [visibleColumns, setVisibleColumns] = useState<string[]>(CPQ_COLUMNS);
   const [showFilters, setShowFilters] = useState(false);
   const [showColumnManager, setShowColumnManager] = useState(false);
+  const [showDigitFilters, setShowDigitFilters] = useState(false);
   const [digitOptions, setDigitOptions] = useState<DigitGroup[]>([]);
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [productOptions, setProductOptions] = useState({
@@ -76,8 +82,16 @@ export default function CpqFeatureClient() {
   })), [rows]);
 
   const filteredFilterColumns = useMemo(() => visibleColumns.filter((column) => column.toLowerCase().includes(filterSearch.toLowerCase())), [filterSearch, visibleColumns]);
-  const filteredRows = useMemo(() => rows.filter((row) => rowMatchesMultiSelectFilters(row, filters)), [rows, filters]);
-  const selectedCount = Object.values(picked).filter(Boolean).length;
+  const filteredRows = useMemo(() => rows.filter((row) => {
+    if (!rowMatchesMultiSelectFilters(row, filters)) return false;
+    return visibleColumns.every((column) => {
+      const query = (headerFilters[column] || '').trim().toLowerCase();
+      if (!query) return true;
+      return String(row[column] || '').toLowerCase().includes(query);
+    });
+  }), [rows, filters, headerFilters, visibleColumns]);
+  const selectedCount = pickedRowKeys.size;
+  const allVisibleSelected = !!filteredRows.length && filteredRows.every((row) => pickedRowKeys.has(row._rowKey));
 
   async function generateRows() {
     const selectedDigitChoices = digitOptions.flatMap((group) => {
@@ -110,13 +124,14 @@ export default function CpqFeatureClient() {
       setStatus(payload?.error || 'Generation failed');
       return;
     }
-    setRows(payload.rows || []);
-    setPicked({});
+    const generatedRows = (payload.rows || []).map((row: GeneratedRow, index: number) => ({ ...row, _rowKey: buildRowKey(row, index) }));
+    setRows(generatedRows);
+    setPickedRowKeys(new Set());
     setStatus(`Generated ${payload.rows?.length || 0} SKU combination(s).`);
   }
 
   async function pushRows() {
-    const selected = filteredRows.filter((_, index) => picked[index]);
+    const selected = rows.filter((row) => pickedRowKeys.has(row._rowKey));
     if (!selected.length) return setStatus('No selected rows to push.');
 
     const mode = window.prompt('Reverse brake or non reverse brake? Enter: reverse or non_reverse');
@@ -125,12 +140,32 @@ export default function CpqFeatureClient() {
     const res = await fetch('/api/cpq/push', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ runId: null, brakeMode: mode, rows: selected })
+      body: JSON.stringify({ runId: null, brakeMode: mode, rows: selected.map(({ _rowKey, ...row }) => row) })
     });
     const payload = await safeReadJsonResponse(res) as any;
     if (!res.ok) return setStatus(payload?.error || 'Push failed');
 
     setStatus(`Push complete. Pushed: ${payload.pushed || 0}. Skipped duplicate SKU: ${payload.skippedDuplicateSkuCount || 0}. Failed rows: ${Array.isArray(payload.failedRows) ? payload.failedRows.length : 0}.`);
+  }
+
+  function toggleDigitChoice(digitPosition: number, codeValue: string) {
+    setSelectedCodesByDigit((current) => {
+      const selectedCodes = new Set(current[digitPosition] || []);
+      if (selectedCodes.has(codeValue)) selectedCodes.delete(codeValue);
+      else selectedCodes.add(codeValue);
+      return { ...current, [digitPosition]: Array.from(selectedCodes) };
+    });
+  }
+
+  function toggleSelectAllVisible(checked: boolean) {
+    setPickedRowKeys((current) => {
+      const next = new Set(current);
+      filteredRows.forEach((row) => {
+        if (checked) next.add(row._rowKey);
+        else next.delete(row._rowKey);
+      });
+      return next;
+    });
   }
 
   return (
@@ -162,35 +197,56 @@ export default function CpqFeatureClient() {
       </div>
 
       <div className="card compactCard compactSection">
-        <div className="filtersHeader"><strong>Digit-based options (1-30)</strong><button onClick={() => setSelectedCodesByDigit({})}>Reset option selections</button></div>
-        {loadingOptions ? <div className="subtle">Loading options...</div> : (
-          <div className="matrixFilterGrid featureFilterGrid">
-            {digitOptions.map((group) => (
-              <label className="filterLabel" key={group.digitPosition}>Digit {group.digitPosition}: {group.optionName} {group.isRequired ? '(required)' : '(optional)'}
-                {group.selectionMode === 'single' ? (
-                  <select value={(selectedCodesByDigit[group.digitPosition] || [''])[0] || ''} onChange={(e) => setSelectedCodesByDigit((curr) => ({ ...curr, [group.digitPosition]: e.target.value ? [e.target.value] : [] }))}>
-                    {!group.isRequired ? <option value="">-- none --</option> : null}
-                    {group.choices.map((choice) => <option key={`${group.digitPosition}-${choice.codeValue}`} value={choice.codeValue}>{choice.codeValue} · {choice.choiceValue}</option>)}
-                  </select>
-                ) : (
-                  <select multiple className="multiSelect" value={selectedCodesByDigit[group.digitPosition] || []} onChange={(e) => setSelectedCodesByDigit((curr) => ({ ...curr, [group.digitPosition]: selectedValues(e) }))}>
-                    {group.choices.map((choice) => <option key={`${group.digitPosition}-${choice.codeValue}`} value={choice.codeValue}>{choice.codeValue} · {choice.choiceValue}</option>)}
-                  </select>
-                )}
-              </label>
-            ))}
+        <div className="filtersHeader">
+          <strong>Digit-based options (1-30)</strong>
+          <div className="cpqFeatureHeaderActions">
+            <button onClick={() => setShowDigitFilters((current) => !current)}>{showDigitFilters ? 'Collapse' : 'Expand'}</button>
+            <button onClick={() => setSelectedCodesByDigit({})}>Reset option selections</button>
           </div>
-        )}
-        <div className="toolbar compactToolbar" style={{ marginTop: 10 }}>
-          <button className="primary" onClick={generateRows}>Generate</button>
+        </div>
+        {showDigitFilters ? (
+          loadingOptions ? <div className="subtle">Loading options...</div> : (
+            <div className="matrixFilterGrid featureFilterGrid">
+              {digitOptions.map((group) => (
+                <label className="filterLabel" key={group.digitPosition}>Digit {group.digitPosition}: {group.optionName} {group.isRequired ? '(required)' : '(optional)'}
+                  {group.selectionMode === 'single' ? (
+                    <select value={(selectedCodesByDigit[group.digitPosition] || [''])[0] || ''} onChange={(e) => setSelectedCodesByDigit((curr) => ({ ...curr, [group.digitPosition]: e.target.value ? [e.target.value] : [] }))}>
+                      {!group.isRequired ? <option value="">-- none --</option> : null}
+                      {group.choices.map((choice) => <option key={`${group.digitPosition}-${choice.codeValue}`} value={choice.codeValue}>{choice.codeValue} · {choice.choiceValue}</option>)}
+                    </select>
+                  ) : (
+                    <details className="choicePopover">
+                      <summary>{(selectedCodesByDigit[group.digitPosition] || []).length ? `${(selectedCodesByDigit[group.digitPosition] || []).length} selected` : 'Choose options'}</summary>
+                      <div className="choiceList">
+                        {group.choices.map((choice) => (
+                          <label key={`${group.digitPosition}-${choice.codeValue}`} className="choiceRow">
+                            <input
+                              type="checkbox"
+                              checked={(selectedCodesByDigit[group.digitPosition] || []).includes(choice.codeValue)}
+                              onChange={() => toggleDigitChoice(group.digitPosition, choice.codeValue)}
+                            />
+                            {choice.codeValue} · {choice.choiceValue}
+                          </label>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                </label>
+              ))}
+            </div>
+          )
+        ) : <div className="subtle">Collapsed by default for a cleaner workspace. Expand when you need digit-level filters.</div>}
+        <div className="toolbar compactToolbar cpqFeatureSectionActions">
+          <button className="primary" onClick={generateRows}>Generate table rows</button>
         </div>
       </div>
 
       <div className="cpqFeatureToolbar toolbar compactToolbar">
         <button onClick={() => setShowFilters((current) => !current)}>{showFilters ? 'Hide filters' : 'Show filters'}</button>
         <button onClick={() => setShowColumnManager((current) => !current)}>{showColumnManager ? 'Hide columns' : 'Columns'}</button>
-        <button onClick={() => setPicked(Object.fromEntries(filteredRows.map((_, index) => [index, true])))}>Bulk select filtered</button>
-        <button onClick={() => setPicked({})}>Clear selection</button>
+        <button onClick={() => toggleSelectAllVisible(true)}>Select all visible</button>
+        <button onClick={() => toggleSelectAllVisible(false)}>Unselect all visible</button>
+        <button onClick={() => setPickedRowKeys(new Set())}>Clear selection</button>
         <button className="primary" onClick={pushRows}>Push selected to Sales - SKU vs Country</button>
         <span className="subtle">Selected: {selectedCount} · Filtered: {filteredRows.length} / {rows.length}</span>
       </div>
@@ -219,7 +275,7 @@ export default function CpqFeatureClient() {
             {filteredFilterColumns.map((column) => (
               <label key={`filter-${column}`} className="filterLabel">
                 {column}
-                <select multiple className="multiSelect" value={filters[column] || []} onChange={(e) => setFilters((curr) => ({ ...curr, [column]: selectedValues(e) }))}>
+                <select multiple className="multiSelect" value={filters[column] || []} onChange={(e) => setFilters((curr) => ({ ...curr, [column]: Array.from(e.target.selectedOptions).map((option) => option.value) }))}>
                   {(filterOptions[column] || []).map((value) => <option key={`${column}-${value}`} value={value}>{value}</option>)}
                 </select>
               </label>
@@ -229,12 +285,42 @@ export default function CpqFeatureClient() {
       ) : null}
 
       <div className="tableViewport"><div className="tableWrap cpqFeatureTableWrap"><table className="cpqFeatureTable">
-        <thead><tr><th>Pick</th>{visibleColumns.map((column) => <th key={column}>{column}</th>)}</tr></thead>
+        <thead>
+          <tr>
+            <th>
+              <div className="tableSelectControls">
+                <label className="choiceRow">
+                  <input type="checkbox" checked={allVisibleSelected} onChange={(e) => toggleSelectAllVisible(e.target.checked)} />
+                  All visible
+                </label>
+                <button onClick={() => toggleSelectAllVisible(false)}>Unselect visible</button>
+              </div>
+            </th>
+            {visibleColumns.map((column) => <th key={column}>{column}</th>)}
+          </tr>
+          <tr className="filterRow">
+            <th />
+            {visibleColumns.map((column) => (
+              <th key={`filter-${column}`}>
+                <input
+                  value={headerFilters[column] || ''}
+                  onChange={(e) => setHeaderFilters((current) => ({ ...current, [column]: e.target.value }))}
+                  placeholder="Filter..."
+                />
+              </th>
+            ))}
+          </tr>
+        </thead>
         <tbody>
-          {filteredRows.map((row, index) => (
-            <tr key={`${row['SKU code']}-${index}`}>
-              <td><input type="checkbox" checked={!!picked[index]} onChange={(e) => setPicked((curr) => ({ ...curr, [index]: e.target.checked }))} /></td>
-              {visibleColumns.map((column) => <td key={`${column}-${index}`}>{row[column] || ''}</td>)}
+          {filteredRows.map((row) => (
+            <tr key={row._rowKey}>
+              <td><input type="checkbox" checked={pickedRowKeys.has(row._rowKey)} onChange={(e) => setPickedRowKeys((current) => {
+                const next = new Set(current);
+                if (e.target.checked) next.add(row._rowKey);
+                else next.delete(row._rowKey);
+                return next;
+              })} /></td>
+              {visibleColumns.map((column) => <td key={`${column}-${row._rowKey}`}>{row[column] || ''}</td>)}
             </tr>
           ))}
         </tbody>
