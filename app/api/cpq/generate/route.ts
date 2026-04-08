@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireApiRole } from '@/lib/api-auth';
 import { sql } from '@/lib/db';
 import { buildCpqCombinationsDetailed, CPQ_COLUMNS, mapOptionNameToCanonical, normalizeCharacter17 } from '@/lib/cpq-core';
+import type { CpqMetadata } from '@/lib/cpq-core';
 import { LEGACY_PATH_KEYS, trackLegacyPathInvocation } from '@/lib/deprecation-telemetry';
 
 type SelectedDigitChoice = {
@@ -29,6 +30,24 @@ type ImportRunGenerationContext = {
   failed_at: string | null;
   completed_at: string | null;
 };
+
+function isSelectedLine(value: string): value is CpqMetadata['selectedLine'] {
+  return value === 'A Line' || value === 'C Line' || value === 'P Line' || value === 'T Line' || value === 'G Line';
+}
+
+function parseSelectedLine(value: unknown): CpqMetadata['selectedLine'] | null {
+  if (typeof value !== 'string') return null;
+  return isSelectedLine(value) ? value : null;
+}
+
+function isElectricType(value: string): value is CpqMetadata['electricType'] {
+  return value === 'Non electric' || value === 'Electric';
+}
+
+function parseElectricType(value: unknown): CpqMetadata['electricType'] | null {
+  if (typeof value !== 'string') return null;
+  return isElectricType(value) ? value : null;
+}
 
 function buildRowsFromSelectedChoices(payload: any, digitConfigs: DigitConfig[], dependencyRules: DependencyRule[]) {
   const cpqRuleset = String(payload?.cpqRuleset || '').trim();
@@ -250,9 +269,17 @@ export async function GET(request: Request) {
     }
 
     const scopedRules = Array.from(scopedRulesByKey.values()).sort((a, b) => Number(a.digit_position) - Number(b.digit_position) || String(a.code_value).localeCompare(String(b.code_value)));
+    const selectedLine = parseSelectedLine(run.selected_line);
+    if (!selectedLine) {
+      return NextResponse.json({ success: false, phase: 'generation_validation', error: `Invalid selected_line value: ${run.selected_line}` }, { status: 400 });
+    }
+    const electricType = parseElectricType(run.electric_type);
+    if (!electricType) {
+      return NextResponse.json({ success: false, phase: 'generation_validation', error: `Invalid electric_type value: ${run.electric_type}` }, { status: 400 });
+    }
     const { rows, diagnostics } = buildCpqCombinationsDetailed(scopedRules, {
-      selectedLine: run.selected_line,
-      electricType: run.electric_type,
+      selectedLine,
+      electricType,
       isSpecial: run.is_special,
       specialEditionName: run.special_edition_name || undefined,
       character17: run.character_17,
