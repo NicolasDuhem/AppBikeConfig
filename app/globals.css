@@ -137,11 +137,18 @@ th { position:sticky; top:0; background:#f8faff; z-index:1; }
 .cpqFeatureHeaderRow { display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; align-items:center; }
 .cpqFeatureFilePicker { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
 .cpqFeatureToolbar { margin-bottom:6px; }
+.cpqFeatureHeaderActions { display:flex; gap:6px; align-items:center; }
+.cpqFeatureSectionActions { margin-top:8px; justify-content:flex-end; }
 .columnManagerCard { margin-bottom:8px; }
 .columnToggleGrid { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:6px 10px; }
-.featureFilterGrid { grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); }
+.featureFilterGrid { grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:10px; }
 .cpqFeatureTableWrap { flex:1; }
 .cpqFeatureTable { min-width:1100px; }
+.choicePopover summary { list-style:none; cursor:pointer; border:1px solid var(--line); border-radius:10px; padding:6px 10px; background:#fff; color:#34405d; text-transform:none; font-weight:500; }
+.choicePopover[open] summary { border-bottom-left-radius:0; border-bottom-right-radius:0; }
+.choicePopover .choiceList { border-top-left-radius:0; border-top-right-radius:0; border-top:none; max-height:165px; }
+.tableSelectControls { display:grid; gap:6px; min-width:130px; }
+.tableSelectControls button { padding:4px 8px; font-size:12px; }
 
 @media (max-width: 1100px) {
   .addRuleGrid { grid-template-columns:repeat(2,minmax(200px,1fr)); }
