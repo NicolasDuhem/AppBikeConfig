@@ -31,11 +31,11 @@ Runtime process/data-flow reference for AppBikeConfig.
 
 ## 4) SKU definition lifecycle (canonical)
 
-- UI/API: `/sku-definition` + `/api/sku-rules`.
-- Reads: `cpq_import_rows`, `audit_log`, `app_users`, `cpq_product_attributes` (delete guard).
-- Writes: `cpq_import_rows`, `audit_log`.
+- UI/API: `/sku-definition` + `/api/sku-rules` + `/api/sku-rule-translations`.
+- Reads: `cpq_import_rows`, `cpq_import_row_translations`, `cpq_countries` (locale catalog), `audit_log`, `app_users`, `cpq_product_attributes` (delete guard).
+- Writes: `cpq_import_rows`, `cpq_import_row_translations`, `audit_log`.
 - Feature flags: not directly gated; functionally part of CPQ direction.
-- Rollback/failure semantics: reject duplicates, block delete when references exist.
+- Rollback/failure semantics: reject duplicates, block delete when references exist; translation rows are optional and fallback to canonical `choice_value` when missing.
 
 ## 5) Product setup
 

@@ -49,6 +49,19 @@ export type SkuDigitIssue = {
 };
 
 
+export type SkuRuleTranslationRow = {
+  cpq_import_row_id: number;
+  digit_position: number;
+  option_name: string;
+  code_value: string;
+  choice_value: string;
+  is_active: boolean;
+  translated_value: string | null;
+  translation_updated_at: string | null;
+  translation_updated_by_email: string | null;
+};
+
+
 export type BrakeType = 'reverse' | 'non_reverse';
 export type CpqCountry = { id: number; country: string; region: string; brake_type: BrakeType };
 export type CpqMatrixRow = MatrixRow & {

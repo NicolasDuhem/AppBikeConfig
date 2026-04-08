@@ -17,7 +17,7 @@ Runtime-grounded schema inventory for AppBikeConfig. This document captures what
 | `cpq_product_attributes` | Active | High | Normalized option mapping from generated products.
 | `cpq_products` | Active (with legacy payload columns) | High | CPQ product identity persists; many text columns compatibility-only.
 | `cpq_products_flat` (view) | Active compatibility projection | High | CPQ matrix read joins rely on it.
-| `cpq_sku_rules`, `cpq_countries`, `cpq_availability` | Active | High | CPQ matrix runtime core.
+| `cpq_sku_rules`, `cpq_countries`, `cpq_availability` | Active | High | CPQ matrix runtime core. `cpq_countries.locale_code` drives translation locale selection.|
 | `cpq_product_assets` | Active (feature-flagged writes) | High | Picture picker persistence.
 | `sku_digit_option_config`, `sku_generation_dependency_rules` | Active | High | Product setup + generation validation.
 | `role_permission_baselines_audit` | Active | High | Role baseline PATCH appends rows.
@@ -25,7 +25,7 @@ Runtime-grounded schema inventory for AppBikeConfig. This document captures what
 | `setup_options` | Compatibility only / partial | High | Legacy setup API still reachable.
 | `sku_rules` | Partial / migration-era | Medium | Used by migrations/seed/backfill, not main runtime APIs.
 | `cpq_import_runs` | Partial / migration-era | High | `/api/cpq/generate?run_id=` still reads/writes status.
-| `cpq_import_row_translations` | Unused in repo | Medium | No runtime references found.
+| `cpq_import_row_translations` | Active | High | Locale translation overrides for canonical `cpq_import_rows` choices via `/api/sku-rule-translations`.|
 
 ## 2) High-value column usage notes
 
@@ -40,6 +40,11 @@ Runtime-grounded schema inventory for AppBikeConfig. This document captures what
 ### `cpq_import_runs`
 - Runtime-relevant fields in GET diagnostic path: `id`, `selected_line`, `electric_type`, `is_special`, `special_edition_name`, `character_17`, `file_name`, `current_phase`, `status`, `error_message`, `error_stack`, `completed_at`, `failed_at`.
 
+
+### `cpq_import_row_translations`
+- Active fields: `cpq_import_row_id`, `locale`, `translated_value`, `created_at`, `updated_at`, `created_by`, `updated_by`.
+- Runtime behavior: optional per-locale override of canonical `cpq_import_rows.choice_value`; blank/missing translation falls back to canonical text.
+
 ## 3) Critical constraints relied on by runtime
 
 - `cpq_import_rows_active_structural_uniq` (active canonical uniqueness).
@@ -52,7 +57,7 @@ Runtime-grounded schema inventory for AppBikeConfig. This document captures what
 ## 4) Drift and uncertainty notes
 
 - `cpq_import_runs` is still reachable for diagnostics but creation path appears external/retired in this repo.
-- `cpq_import_row_translations` has no references in code; keep as medium-certainty until external dependency audit is complete.
+- `cpq_import_row_translations` is now consumed by `/api/sku-rule-translations` and `/sku-definition` translations subsection.
 - Legacy tables/routes remain reachable whenever `import_csv_cpq` is false.
 - `/api/countries` is now telemetry-instrumented as a compatibility endpoint and should not be extended for new features.
 

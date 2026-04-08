@@ -65,6 +65,7 @@ create table if not exists cpq_countries (
   country text not null unique,
   region text not null,
   brake_type text not null check (brake_type in ('reverse', 'non_reverse')),
+  locale_code text not null default 'en-US',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
