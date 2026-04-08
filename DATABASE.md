@@ -1,122 +1,183 @@
 # DATABASE.md
 
-## Purpose
+## Purpose and scope
 
-Operational database reference for the **CPQ-only** AppBikeConfig runtime (post-cutover cleanup).
+This is the operational database source-of-truth for **AppBikeConfig in CPQ-only runtime mode**.
 
-This document classifies each important object as:
-- **Active** (used by current runtime code),
-- **Transitional** (still used but not a core steady-state path),
-- **Historical / cleanup candidate** (exists in schema but unused by runtime code in this repo).
+Reconciliation basis used for this pass:
+- Runtime SQL in `app/api/**` and `lib/**`.
+- Migration/baseline SQL in `sql/**`.
+- Fresh schema snapshot in `database schema.csv`.
+- Fresh constraints snapshot in `database constraints.csv`.
+- Generated heuristic inventory in `docs/generated/db-usage-report.md`.
 
-## 1) Runtime inventory and status
+Date of reconciliation: **April 8, 2026**.
 
-| Object(s) | Status | Certainty | Runtime notes |
-|---|---|---:|---|
-| `app_users`, `roles`, `user_roles`, `permissions`, `role_permissions`, `user_permissions` | Active | High | Authentication and RBAC resolution for page/API access control. |
-| `audit_log` | Active | High | Audit stream for mutating operations and transitional diagnostics events. |
-| `feature_flags`, `feature_flag_audit` | Active | High | Feature-flag management remains active; runtime-relevant flag is `cpq_bdam_picture_picker`. |
-| `cpq_import_rows` | Active (canonical) | High | Source-of-truth option rows for SKU definition and generation input. |
-| `cpq_import_row_translations` | Active | High | Locale overlay values for option labels returned by CPQ options flow. |
-| `sku_digit_option_config`, `sku_generation_dependency_rules` | Active | High | Product setup control plane for generation validation/constraints. |
-| `cpq_products`, `cpq_product_attributes` | Active | High | Persisted generated product identity plus normalized attribute rows. |
-| `cpq_sku_rules`, `cpq_availability`, `cpq_countries` | Active | High | Canonical Sales SKU-vs-country runtime state including brake-type and locale behavior. |
-| `cpq_products_flat` (view) | Active | High | Primary read projection for matrix table rendering. |
-| `cpq_product_assets` | Active (flag-gated writes) | High | Picture-picker metadata persisted when feature flag is enabled. |
-| `cpq_import_runs` | Transitional | High | Still used by `/api/cpq/generate?run_id=` diagnostics/status flow. |
-| `products`, `countries`, `availability` | Historical / cleanup candidate | High | Legacy matrix data model; no active runtime callers remain in repo code. |
-| `setup_options` | Historical / cleanup candidate | High | Legacy setup model; replaced by setup config tables. |
-| `sku_rules` | Historical / cleanup candidate | Medium | Migration/seed-era object retained in schema scripts; not active runtime source. |
+---
 
-## 2) Canonical CPQ objects (field-aware operational notes)
+## 1) Executive reconciliation findings
 
-### 2.1 `cpq_import_rows`
+1. Runtime is fully CPQ-oriented: active tables are CPQ + RBAC + feature flags + audit.
+2. The fresh CSV schema/constraints snapshot contains **21 objects** and does **not** include legacy runtime-era tables (`products`, `countries`, `availability`, `setup_options`).
+3. `sql/schema.sql` still defines those historical objects, so there is a **repo baseline vs live-schema gap**.
+4. `sku_rules` still exists in the fresh CSV snapshot but appears runtime-unused outside migrations/seed and legacy checks.
+5. CPQ integrity depends on a small set of constraints/FKs/checks that should be treated as non-negotiable for cleanup work.
 
-Runtime-significant fields:
-- identity/lifecycle: `id`, `status`, `is_active`, `deactivated_at`, `deactivation_reason`
-- option structure: `digit_position`, `option_name`, `code_value`, `choice_value`
-- provenance: `import_run_id`, `source`, `action_attempted`, `updated_at`, `updated_by`
+---
 
-Usage:
-- CRUD and activation logic in SKU definition,
-- option hydration in `/api/cpq/options`,
-- generation input shaping in `/api/cpq/generate`,
-- optional canonical backfill paths in `/api/cpq/push`.
+## 2) Object inventory with status, evidence, and cleanup posture
 
-### 2.2 `cpq_import_row_translations`
+### 2.1 Active runtime objects (high certainty)
 
-Runtime-significant fields:
-- key: (`cpq_import_row_id`, `locale`)
-- payload: `translated_value`
-- provenance: `created_at`, `created_by`, `updated_at`, `updated_by`
+| Object | Status | Runtime evidence | Constraint/relationship dependence | Cleanup posture |
+|---|---|---|---|---|
+| `app_users`, `roles`, `user_roles`, `permissions`, `role_permissions`, `user_permissions` | Active | `lib/auth.ts`, `/api/users`, `/api/roles`, `/api/permissions`, `/api/role-permissions` | RBAC FK chain and unique keys are required for effective permission resolution | Keep |
+| `audit_log` | Active | `/api/sku-rules`, `/api/cpq-matrix*`, `/api/sku-rule-translations` via `writeAuditLog` | FK to `app_users` for attribution | Keep |
+| `feature_flags`, `feature_flag_audit` | Active | `/api/feature-flags`, `/api/feature-flags/public`, `lib/feature-flags.ts` | `feature_flags.flag_key` uniqueness and audit FK chain | Keep |
+| `cpq_import_rows` | Active (canonical) | `/api/sku-rules`, `/api/cpq/options`, `/api/cpq/generate`, `/api/cpq/push`, `/api/product-setup` | status check, import-run/user FKs, uniqueness/indexes from migrations | Keep |
+| `cpq_import_row_translations` | Active | `/api/sku-rule-translations`, `/api/cpq/options` | FK to canonical rows + locale key uniqueness | Keep |
+| `sku_digit_option_config` | Active (admin/config) | `/api/product-setup`, `/api/cpq/options`, `/api/cpq/generate` | digit range + selection mode checks | Keep |
+| `sku_generation_dependency_rules` | Active (admin/config) | `/api/product-setup`, `/api/cpq/options`, `/api/cpq/generate` | unique tuple + digit range + `rule_type=match_code` check | Keep |
+| `cpq_products`, `cpq_product_attributes` | Active | `/api/cpq/push`, delete guard in `/api/sku-rules` | FK chain to canonical rows and generated rows | Keep |
+| `cpq_sku_rules`, `cpq_availability`, `cpq_countries` | Active | `/api/cpq-matrix`, `/api/cpq-matrix/save-all`, `/api/cpq-matrix/bulk-update`, `lib/cpq-matrix-service.ts` | brake-type checks + availability composite PK/FKs | Keep |
+| `cpq_products_flat` (view) | Active read model | `/api/cpq-matrix` joins | Depends on CPQ products + attributes shape | Keep |
+| `cpq_product_assets` | Active (feature-flag gated write path) | `/api/cpq-matrix/picture`, `/api/cpq-matrix` | unique `cpq_sku_rule_id` + FK to CPQ rows | Keep |
 
-Usage:
-- translation overlay reads in `/api/cpq/options`,
-- translation management writes via `/api/sku-rule-translations`,
-- canonical fallback when translation is null/blank.
+### 2.2 Transitional object
 
-### 2.3 `cpq_products` + `cpq_product_attributes`
+| Object | Status | Evidence | Why transitional |
+|---|---|---|---|
+| `cpq_import_runs` | Transitional | `/api/cpq/generate` GET (`run_id`) updates status phases | Diagnostics/observability path is still used, but not a core day-to-day CPQ authoring path |
 
-`cpq_products` key fields:
-- `id`, `sku_code`, `cpq_ruleset`, `import_run_id`
-- brake semantics: `brake_reverse`, `brake_non_reverse`
+### 2.3 Historical or cleanup-candidate objects
 
-`cpq_product_attributes` key fields:
-- `cpq_product_id`, `option_name`, `option_value`
+| Object | Current status | Evidence of non-runtime use | Risk | Recommendation |
+|---|---|---|---|---|
+| `products`, `countries`, `availability`, `setup_options` | Historical schema objects in repo SQL baseline | Not present in fresh CSV schema snapshot; no active runtime API writes/reads | Medium (possible external SQL dependency) | Safe to remove from repo baseline SQL after external dependency signoff |
+| `sku_rules` | Historical/transitional schema artifact | Present in fresh CSV snapshot, but runtime queries use `cpq_import_rows` and CPQ tables | Medium-high (still physically present in some DBs and referenced by old migrations) | Do not drop immediately; run focused dependency verification then staged retirement |
 
-Usage:
-- persisted output of CPQ push,
-- downstream flattening and matrix render/filter support.
+---
 
-### 2.4 `cpq_sku_rules` + `cpq_availability` + `cpq_countries`
+## 3) Field-level operational truth (where it matters)
 
-- `cpq_sku_rules`: matrix row identity/state (`id`, `sku_code`, `cpq_ruleset`, `brake_type`, `bc_status`, `is_active` plus editable fields).
-- `cpq_availability`: availability key/value by (`cpq_rule_id`, `cpq_country_id`) and `available`.
-- `cpq_countries`: country metadata including `brake_type` and `locale_code`.
+### 3.1 Canonical authoring: `cpq_import_rows`
 
-Usage:
-- full Sales matrix read/write lifecycle,
-- brake compatibility validation on bulk/single edits,
-- locale default resolution for translated option values.
+High-impact columns used in runtime behavior:
+- Identity/context: `id`, `import_run_id`, `row_number`, `source`.
+- Option semantics: `digit_position`, `option_name`, `code_value`, `choice_value`, `normalized_option_name`.
+- Lifecycle/state: `status`, `is_active`, `deactivated_at`, `deactivation_reason`, `action_attempted`.
+- Attribution/timestamps: `updated_at`, `updated_by`.
 
-### 2.5 `sku_digit_option_config` + `sku_generation_dependency_rules`
+Runtime behaviors tied to fields:
+- Duplicate prevention and reactivation conflict checks use `(digit_position, option_name, code_value, is_active/status)`.
+- Delete guard checks indirect usage via `cpq_product_attributes.cpq_import_row_id`.
+- CPQ push can create fallback canonical rows (`action_attempted='reference_attribute'`) when missing.
 
-Usage:
-- generation-time constraints (required digits, single/multi selection mode, dependency matching),
-- Product - Setup admin editing and persistence.
+### 3.2 Translation overlay: `cpq_import_row_translations`
 
-## 3) Constraints and invariants that matter to runtime correctness
+Critical fields:
+- Join key: `cpq_import_row_id`, `locale`.
+- Payload: `translated_value`.
+- Provenance: `created_by`, `updated_by`, `updated_at`.
 
-Critical invariants include:
-- structural uniqueness for active canonical rows in `cpq_import_rows`,
-- active row uniqueness in `cpq_sku_rules` by business key,
-- uniqueness in `cpq_product_attributes` (`cpq_product_id`, `option_name`) for idempotent upserts,
-- uniqueness in `cpq_availability` per rule-country pair,
-- foreign-key integrity in RBAC joins,
-- brake/status domain checks for matrix consistency.
+Runtime note:
+- Locale updates are constrained to locales configured on `cpq_countries.locale_code`.
 
-## 4) Legacy object reclassification (post-cutover reality)
+### 3.3 Setup control plane
 
-### `products`, `countries`, `availability`
-- **Current status:** historical only in app runtime.
-- **Evidence:** no active `/api/matrix*` or matrix service callers in repo runtime code.
-- **Risk:** possible unknown external DB consumers outside this repository.
-- **Removal prerequisite:** explicit downstream dependency check and migration/backfill strategy for any external SQL consumers.
+`sku_digit_option_config`:
+- Critical fields: `digit_position`, `option_name`, `is_required`, `selection_mode`, `is_active`.
+- Generation validity depends on these constraints for required/single/multi semantics.
 
-### `setup_options`
-- **Current status:** historical only in app runtime.
-- **Evidence:** no `/api/setup-options` route remains.
-- **Removal prerequisite:** drop plan with verification no external writer/reader still depends on it.
+`sku_generation_dependency_rules`:
+- Critical fields: `source_digit_position`, `target_digit_position`, `rule_type`, `active`, `sort_order`, `notes`.
+- Runtime currently assumes `rule_type='match_code'`.
 
-### `sku_rules`
-- **Current status:** transitional historical schema artifact.
-- **Evidence:** present in SQL migrations/seeds; canonical runtime uses `cpq_import_rows` + CPQ tables.
-- **Removal prerequisite:** migration history policy decision (retain for replay vs squash/archive strategy).
+### 3.4 CPQ persistence chain
 
-## 5) Generated inventory artifacts
+`cpq_products`:
+- Core identity and metadata are persisted at push time (`sku_code`, `cpq_ruleset`, brake flags, created_by/import_run_id).
 
-- `docs/generated/db-usage-report.md`
-- `docs/database-runtime-inventory.json`
-- `docs/database-runtime-inventory.md`
+`cpq_product_attributes`:
+- Stores option links by `(cpq_product_id, option_name) -> cpq_import_row_id` for normalized projection and delete protection.
 
-These are heuristic aids; this document remains the authoritative operational interpretation.
+`cpq_sku_rules`:
+- Sales matrix row identity and editable fields (`sku_code`, `cpq_ruleset`, `brake_type`, product descriptors, `bc_status`, `is_active`).
+
+`cpq_availability`:
+- Country assignment matrix keyed by `(cpq_sku_rule_id, cpq_country_id)` with `available`.
+
+`cpq_countries`:
+- Governs country-brake compatibility and locale resolution (`country`, `region`, `brake_type`, `locale_code`).
+
+`cpq_product_assets`:
+- Optional picture metadata (`asset_url`, `png_url`, `asset_id`, `notes`, selection attribution).
+
+---
+
+## 4) Constraints and indexes that are operationally critical
+
+### 4.1 Must-preserve checks and FKs
+
+From `database constraints.csv`, these are runtime-critical:
+- `cpq_countries.brake_type` domain check (`reverse|non_reverse`).
+- `cpq_sku_rules.brake_type` and `cpq_sku_rules.bc_status` domain checks.
+- `cpq_import_rows.status` domain check.
+- `sku_digit_option_config` digit range + selection mode checks.
+- `sku_generation_dependency_rules` digit range + rule type check.
+- FK chain:
+  - `cpq_availability -> cpq_sku_rules/cpq_countries`.
+  - `cpq_product_attributes -> cpq_products/cpq_import_rows`.
+  - `cpq_import_row_translations -> cpq_import_rows`.
+  - Auth/audit FKs to `app_users`.
+
+### 4.2 Index/unique constraints used by logic
+
+Enforced in migrations and relied upon by API behavior:
+- Active duplicate prevention on CPQ SKU rows (`cpq_sku_rules_active_unique` concept).
+- Canonical structural uniqueness for active import rows (`cpq_import_rows_active_structural_uniq` migration path).
+- Unique row-locale translation key.
+- Unique `(cpq_product_id, option_name)` attribute pairing.
+- Composite uniqueness/PK for availability rule-country pairs.
+
+---
+
+## 5) Runtime-vs-schema discrepancies to track
+
+1. **Fresh CSV schema excludes `products/countries/availability/setup_options`, but `sql/schema.sql` still creates them.**
+   - Interpretation: live environment captured by CSV is further cleaned than repo baseline SQL.
+2. `sku_rules` persists in both repo SQL and fresh CSV schema but is not a runtime table.
+3. Repo migration history still contains legacy-era index/constraint maintenance for `sku_rules`; this is safe for historical replay but should be isolated from forward-looking baseline.
+
+---
+
+## 6) Cleanup/removal readiness matrix
+
+| Object family | Removal readiness | Prerequisites | Certainty |
+|---|---|---|---|
+| `products`, `countries`, `availability`, `setup_options` definitions in repo baseline SQL/docs | **Ready to prepare immediate removal** | Confirm no external consumers rely on bootstrap `sql/schema.sql`; then delete definitions and legacy seed rows | High |
+| `sku_rules` table and its legacy indexes/constraints | **Prepare-only (not immediate drop)** | Run dependency watchlist verification (external SQL clients, reporting jobs, ad-hoc scripts), then stage deprecation migration | Medium |
+| Legacy references in non-authoritative docs/artifacts | **Safe now** | Update generated/runtime inventory and retirement docs in same PR | High |
+
+---
+
+## 7) Recommended next cleanup step (concrete)
+
+**Next run should be a schema migration + baseline cleanup pass with this sequence:**
+
+1. **Stage 1 (immediate):** remove historical table definitions (`products`, `countries`, `availability`, `setup_options`) from forward baseline docs/`sql/schema.sql` and stop seeding them.
+2. **Stage 2 (guarded):** add a deprecation migration that marks `sku_rules` as retirement candidate (or archive rename) without immediate hard drop.
+3. **Stage 3 (after verification window):** drop `sku_rules` and its legacy indexes/constraints once external dependency watchlist is clear.
+
+Rollback posture:
+- Stage 1 rollback: reintroduce definitions from git if needed.
+- Stage 2/3 rollback: restore from migration down scripts or schema backup snapshot.
+
+---
+
+## 8) Supporting analysis artifacts
+
+- `docs/generated/db-usage-report.md` (heuristic table-reference scan).
+- `docs/database-runtime-inventory.json` (machine-readable object inventory).
+- `docs/database-runtime-inventory.md` (human summary).
+- `docs/database-cleanup-recommendations.md` (sequenced retirement plan with risks/prereqs).
