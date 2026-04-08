@@ -1,6 +1,6 @@
 # Column cleanup candidates (CSV truth + runtime reconciliation)
 
-Date: April 8, 2026 (dedicated cpq_products small-batch wave).
+Date: April 8, 2026 (cpq_products_flat fallback-reduction wave: product identity subset).
 
 ## High-confidence candidates
 
@@ -28,7 +28,8 @@ Reason: no runtime SQL references in app/lib.
 |---|---|---|---|
 | Must keep now | `id`, `import_run_id`, `cpq_ruleset`, `sku_code`, `created_by`, `created_at` | `/api/cpq/push` writes identity row in `cpq_products`; `cpq_sku_rules.cpq_product_id` FK keeps row identity relevant. | Keep. |
 | Safe next-drop candidate (executed now) | `brake_reverse`, `brake_non_reverse` | No `cpq_products_flat` projection dependency; no in-repo runtime reads; push path now persists brake semantics through `cpq_product_attributes` (`BrakeReverse` / `BrakeNonReverse`) and `cpq_sku_rules.brake_type`. | Dropped in migration `017_cpq_products_drop_brake_columns.sql` with additive rollback SQL in-file. |
-| Compatibility-only and currently blocked by `cpq_products_flat` fallback | `product_assist`, `product_family`, `product_line`, `product_model`, `product_type`, `description` | `cpq_products_flat` still computes `coalesce(max(attribute), p.legacy_column)` for these fields. | Keep until fallback reduction wave updates the view and verifies historical row backfill posture. |
+| Safe next-drop candidate (executed now) | `product_assist`, `product_family`, `product_line`, `product_model`, `product_type` | View fallback removed in `cpq_products_flat` (attribute-only projection for ProductAssist/ProductFamily/ProductLine/ProductModel/ProductType); no in-repo runtime direct read/write dependency on raw `cpq_products` columns. | Dropped in migration `018_cpq_products_flat_remove_identity_fallback.sql` with additive rollback SQL in-file. |
+| Compatibility-only legacy residue (not currently projected via `cpq_products_flat` fallback) | `description` | No direct runtime read from raw `cpq_products.description`; keep for now and handle in a separate evidence-backed micro-batch. | Keep for now. |
 | Compatibility-only and currently blocked by `cpq_products_flat` fallback | `handlebar_type`, `speeds`, `mudguardsandrack`, `territory`, `mainframecolour`, `rearframecolour`, `frontcarrierblock`, `lighting`, `saddleheight`, `gearratio` | Same view-level `coalesce(..., p.column)` fallback coupling. | Keep for now. |
 | Compatibility-only and currently blocked by `cpq_products_flat` fallback | `saddle`, `tyre`, `brakes`, `pedals`, `saddlebag`, `suspension`, `biketype`, `toolkit`, `saddlelight` | Same view-level fallback coupling; matrix reads through `cpq_products_flat`. | Keep for now. |
 | Compatibility-only and currently blocked by `cpq_products_flat` fallback | `configcode`, `optionbox`, `framematerial`, `frameset`, `componentcolour`, `onbikeaccessories`, `handlebarstemcolour`, `handlebarpincolour`, `frontframecolour`, `frontforkcolour` | Same view-level fallback coupling; no direct API query to raw `cpq_products` columns. | Keep for now. |
@@ -41,14 +42,14 @@ Reason: no runtime SQL references in app/lib.
 - **Uncertain/external-risk note:** out-of-repo ad-hoc SQL/reporting might still read legacy `cpq_products` fields directly; keep batches small with additive rollback posture.
 
 ### Compatibility fallback columns (currently blocked by `cpq_products_flat` coalesce projection)
-  - `product_assist`, `product_family`, `product_line`, `product_model`, `product_type`, `description`
   - `handlebar_type`, `speeds`, `mudguardsandrack`, `territory`, `mainframecolour`, `rearframecolour`, `frontcarrierblock`, `lighting`, `saddleheight`, `gearratio`
   - `saddle`, `tyre`, `brakes`, `pedals`, `saddlebag`, `suspension`, `biketype`, `toolkit`, `saddlelight`
   - `configcode`, `optionbox`, `framematerial`, `frameset`, `componentcolour`, `onbikeaccessories`
   - `handlebarstemcolour`, `handlebarpincolour`, `frontframecolour`, `frontforkcolour`
 - **Removed in this wave (small, low-risk):**
-  - `brake_reverse`, `brake_non_reverse` (migration `017_cpq_products_drop_brake_columns.sql`)
+  - `product_assist`, `product_family`, `product_line`, `product_model`, `product_type` (migration `018_cpq_products_flat_remove_identity_fallback.sql`)
 - **Removed in prior wave:**
+  - `brake_reverse`, `brake_non_reverse` (migration `017_cpq_products_drop_brake_columns.sql`)
   - `position29`, `position30` (migration `016_cpq_products_drop_position_columns.sql`)
 - **Next staged candidates:** only after reducing `cpq_products_flat` fallback dependency for the exact target subset, then drop in small batches.
 

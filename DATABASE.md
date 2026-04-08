@@ -8,7 +8,7 @@ Operational database truth for AppBikeConfig, reconciled against:
 - runtime SQL in `app/**` + `lib/**`
 - repository SQL in `sql/**` (explicitly non-authoritative when conflicting)
 
-Date reconciled: **April 8, 2026** (dedicated cpq_products small-batch cleanup wave).
+Date reconciled: **April 8, 2026** (cpq_products_flat fallback-reduction wave: product identity subset).
 
 ---
 
@@ -62,7 +62,8 @@ Table families:
 ## 3.2 High-confidence cleanup candidates
 
 - `cpq_import_rows.raw_option_name`, `cpq_import_rows.raw_digit`, `cpq_import_rows.raw_code_value` (**removed in prior wave via migration 015; rollback SQL included in-file**)
-- `cpq_products.brake_reverse`, `cpq_products.brake_non_reverse` (**removed in this run via migration 017; rollback SQL included in-file**)
+- `cpq_products.product_assist`, `cpq_products.product_family`, `cpq_products.product_line`, `cpq_products.product_model`, `cpq_products.product_type` (**removed in this run via migration 018 after cpq_products_flat fallback reduction; rollback SQL included in-file**)
+- `cpq_products.brake_reverse`, `cpq_products.brake_non_reverse` (**removed in prior wave via migration 017; rollback SQL included in-file**)
 - `cpq_products.position29`, `cpq_products.position30` (**removed in prior run via migration 016; rollback SQL included in-file**)
 - Remaining denormalized payload columns in `cpq_products` should be dropped only in staged micro-batches with explicit dependency re-check.
 - `cpq_import_runs` row counters/operational fields remain high-potential cleanup candidates, but should not be dropped until run creation/ownership semantics are fully replaced.
@@ -122,11 +123,13 @@ Safe sequence:
 
 Decision implemented in this run:
 1. **Keep** `cpq_import_runs` as a transitional diagnostics object; no destructive drop executed because `/api/cpq/generate` GET still reads generation metadata from this table.
-2. Remove `cpq_products.brake_reverse` and `cpq_products.brake_non_reverse` as compatibility residue not required by runtime or `cpq_products_flat` (migration `017`).
+2. Remove `cpq_products_flat` fallback for product identity fields and drop matched compatibility columns (`product_assist`, `product_family`, `product_line`, `product_model`, `product_type`) in migration `018_cpq_products_flat_remove_identity_fallback.sql`.
+3. Prior wave removal of `cpq_products.brake_reverse` and `cpq_products.brake_non_reverse` remains in place (migration `017`).
 
 Deployment sequencing:
-1. Apply migration `017_cpq_products_drop_brake_columns.sql`.
-2. Deploy runtime change that removes `brake_*` inserts from `/api/cpq/push`.
+1. Apply migration `018_cpq_products_flat_remove_identity_fallback.sql` (view fallback reduction + column drops).
+2. Prior migration `017_cpq_products_drop_brake_columns.sql` remains part of baseline sequence; no new runtime code deployment required in this wave.
 
 Rollback:
-- For migration `017`: run the additive `alter table ... add column` statements documented directly inside migration `017` to restore dropped columns.
+- For migration `018`: run additive `alter table ... add column` statements and the rollback `create or replace view cpq_products_flat` block documented directly inside migration `018` to restore dropped columns + fallback behavior.
+- For migration `017`: run the additive `alter table ... add column` statements documented directly inside migration `017` to restore brake columns if required.
