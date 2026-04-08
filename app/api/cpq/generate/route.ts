@@ -14,6 +14,21 @@ type SelectedDigitChoice = {
 
 type DigitConfig = { digit_position: number; option_name: string; is_required: boolean; selection_mode: 'single' | 'multi' };
 type DependencyRule = { source_digit_position: number; target_digit_position: number; rule_type: 'match_code'; active: boolean; sort_order: number };
+type ImportRunGenerationContext = {
+  id: number;
+  file_name: string;
+  selected_line: string;
+  electric_type: string;
+  is_special: boolean;
+  special_edition_name: string | null;
+  character_17: string;
+  status: string;
+  current_phase: string | null;
+  error_message: string | null;
+  error_stack: string | null;
+  failed_at: string | null;
+  completed_at: string | null;
+};
 
 function buildRowsFromSelectedChoices(payload: any, digitConfigs: DigitConfig[], dependencyRules: DependencyRule[]) {
   const cpqRuleset = String(payload?.cpqRuleset || '').trim();
@@ -174,7 +189,25 @@ export async function GET(request: Request) {
 
     await trackLegacyPathInvocation({ pathKey: LEGACY_PATH_KEYS.cpqImportRunsGenerateGet, route: '/api/cpq/generate', method: 'GET', userId: auth.user.id, details: { runId } });
 
-    const runRows = await sql`select * from cpq_import_runs where id = ${runId} limit 1` as any[];
+    const runRows = await sql`
+      select
+        id,
+        file_name,
+        selected_line,
+        electric_type,
+        is_special,
+        special_edition_name,
+        character_17,
+        status,
+        current_phase,
+        error_message,
+        error_stack,
+        failed_at,
+        completed_at
+      from cpq_import_runs
+      where id = ${runId}
+      limit 1
+    ` as ImportRunGenerationContext[];
     if (!runRows.length) return NextResponse.json({ success: false, phase: 'generation_validation', error: 'Import run not found' }, { status: 404 });
     const run = runRows[0];
 

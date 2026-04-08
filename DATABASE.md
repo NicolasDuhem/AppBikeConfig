@@ -44,7 +44,7 @@ Table families:
 | `cpq_products`, `cpq_product_attributes` | Active + partially legacy payload | Push + normalized link | Keep table, prune columns |
 | `cpq_sku_rules`, `cpq_availability`, `cpq_countries` | Active | Matrix persistence | Keep |
 | `cpq_product_assets` | Active (feature-flag path) | Optional picture flow | Keep |
-| `cpq_import_runs` | Transitional diagnostics | `/api/cpq/generate` GET lifecycle state + metadata read | Keep for now; narrow retained scope and stage retirement |
+| `cpq_import_runs` | Diagnostics/lifecycle residue | `/api/cpq/generate` GET explicit generation-context read + lifecycle updates | Keep for one final staged replacement, then retire |
 | `sku_rules` | Cleanup candidate | No runtime API usage | Replace then drop |
 
 ---
@@ -67,7 +67,7 @@ Table families:
 - `cpq_products.position29`, `cpq_products.position30` (**removed in prior run via migration 016; rollback SQL included in-file**)
 - `cpq_products.handlebar_type`, `speeds`, `mudguardsandrack`, `territory`, `mainframecolour`, `rearframecolour`, `frontcarrierblock`, `lighting`, `saddleheight`, `gearratio`, `saddle`, `tyre`, `brakes`, `pedals`, `saddlebag`, `suspension`, `biketype`, `toolkit`, `saddlelight`, `configcode`, `optionbox`, `framematerial`, `frameset`, `componentcolour`, `onbikeaccessories`, `handlebarstemcolour`, `handlebarpincolour`, `frontframecolour`, `frontforkcolour` (**removed in this run via migration 019 after cpq_products_flat fallback reduction; rollback SQL included in-file**).
 - Compatibility residue left in `cpq_products`: `description` (kept intentionally for a separate evidence-backed micro-batch).
-- `cpq_import_runs` row counters/operational fields remain high-potential cleanup candidates, but should not be dropped until run creation/ownership semantics are fully replaced.
+- `cpq_import_runs` is now narrowed to explicit generation-context read + lifecycle writes in `/api/cpq/generate` GET; row counters/upload ownership fields remain non-runtime residue.
 
 See full staged list in `docs/column-cleanup-candidates.md`.
 
@@ -123,7 +123,7 @@ Safe sequence:
 ## 7) Migration decision and deployment/rollback posture
 
 Decision implemented in this run:
-1. **Keep** `cpq_import_runs` as a transitional diagnostics object; no destructive drop executed because `/api/cpq/generate` GET still reads generation metadata from this table.
+1. **Keep (one step)** `cpq_import_runs` as diagnostics/lifecycle residue; `/api/cpq/generate` GET still reads explicit generation-context metadata and writes lifecycle state in this table.
 2. Remove the remaining `cpq_products_flat` fallback dependency for compatibility attributes and drop matched `cpq_products` columns in migration `019_cpq_products_flat_remove_remaining_fallback.sql`.
 3. Prior wave removals remain in place (`016` position placeholders, `017` brake compatibility columns, `018` product identity columns).
 

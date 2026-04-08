@@ -57,7 +57,7 @@ Date reconciled: **April 8, 2026** (cpq_products_flat fallback-reduction wave: r
 - Endpoint: `/api/cpq/generate`
 - Active flow reads canonical/config tables.
 - Transitional diagnostics still depend on `cpq_import_runs`:
-  - GET reads full run row (`select *`) and consumes metadata fields (`file_name`, `selected_line`, `electric_type`, `is_special`, `special_edition_name`, `character_17`).
+  - GET reads only generation-context + diagnostics columns (`id`, `file_name`, `selected_line`, `electric_type`, `is_special`, `special_edition_name`, `character_17`, `status`, `current_phase`, `error_message`, `error_stack`, `failed_at`, `completed_at`).
   - GET updates lifecycle fields (`current_phase`, `status`, `error_message`, `error_stack`, `completed_at`, `failed_at`).
 - No runtime insert path currently exists in-repo for `cpq_import_runs`; treat this as transitional and keep until run-creation replacement is explicit.
 
@@ -90,12 +90,12 @@ Date reconciled: **April 8, 2026** (cpq_products_flat fallback-reduction wave: r
 
 ## Needs staged verification
 - `cpq_products` remaining denormalized payload column pruning (small dependency-checked batches).
-- `cpq_import_runs` deep cleanup, especially row counters and upload ownership fields that are not used by active runtime SQL.
+- `cpq_import_runs` final retirement: remaining dependency is the `/api/cpq/generate` GET diagnostics lifecycle and generation-context metadata read.
 - Full `sku_rules` retirement.
 
 ## Resolved in this run
 - Completed final `cpq_products` fallback-coupled cleanup wave by removing `cpq_products_flat` fallback for the remaining compatibility subset and dropping the matched legacy columns in migration `019`.
-- `cpq_import_runs` status clarified as transitional diagnostics table that is still read/write-touched by generation lifecycle handling.
+- `cpq_import_runs` dependency narrowed: generation endpoint no longer performs `select *`; it now reads only explicit generation-context + diagnostics columns.
 
 ---
 
@@ -103,4 +103,4 @@ Date reconciled: **April 8, 2026** (cpq_products_flat fallback-reduction wave: r
 
 This run shipped one paired fallback-reduction/drop change and one sequencing decision:
 1. Remove remaining `cpq_products_flat` fallback for compatibility attributes (`HandlebarType` through `FrontForkColour`), then drop matched `cpq_products` columns in migration `019_cpq_products_flat_remove_remaining_fallback.sql`.
-2. Keep `cpq_import_runs` intact for now, and target a dedicated retirement-prep run next.
+2. Keep `cpq_import_runs` intact for now, but treat it as diagnostics/lifecycle residue; next run should execute final table retirement only after replacing GET run metadata/lifecycle ownership.

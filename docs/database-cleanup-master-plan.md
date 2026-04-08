@@ -74,7 +74,7 @@ Risk class: previously high; now mitigated by explicit schema support.
 | `cpq_products`, `cpq_product_attributes` | Active / partially normalized | Active write path; many legacy columns still present | Medium | Keep table, clean columns |
 | `cpq_sku_rules`, `cpq_availability`, `cpq_countries` | Active | Active matrix runtime | Very high | Keep |
 | `cpq_product_assets` | Active (feature-flag path) | Active write when enabled | Medium | Keep |
-| `cpq_import_runs` | Transitional diagnostics | `/api/cpq/generate` GET run metadata + lifecycle updates | Medium | Keep now, stage retirement with explicit replacement |
+| `cpq_import_runs` | Diagnostics/lifecycle residue | `/api/cpq/generate` GET explicit generation-context metadata + lifecycle updates | Medium | Final replacement step, then retire |
 | `sku_rules` | Cleanup candidate (legacy) | Not used by runtime; seed/migration bridge only | Medium-high external dependency risk | Replace/remove in staged migration |
 
 ## 5) Column-level reconciliation (high value cleanup list)
@@ -86,10 +86,10 @@ Risk class: previously high; now mitigated by explicit schema support.
 - Rationale: no runtime reads/writes in API logic; likely import-diagnostics residue.
 
 ### `cpq_import_runs` (column-level verdict)
-- **Runtime read evidence:** `/api/cpq/generate` GET fetches `select *` and uses `file_name`, `selected_line`, `electric_type`, `is_special`, `special_edition_name`, `character_17`.
+- **Runtime read evidence:** `/api/cpq/generate` GET now fetches only explicit columns and uses `id`, `file_name`, `selected_line`, `electric_type`, `is_special`, `special_edition_name`, `character_17`, `status`, `current_phase`, `error_message`, `error_stack`, `failed_at`, `completed_at`.
 - **Runtime write evidence:** `/api/cpq/generate` GET writes `current_phase`, `status`, `error_message`, `error_stack`, `completed_at`, `failed_at`.
 - **No in-repo runtime evidence:** `rows_read`, `rows_imported`, `rows_skipped`, `rows_deactivated`, `rows_inserted`, `uploaded_by`, `uploaded_at`, `started_at`, `is_dry_run`.
-- **Decision in this run:** do not drop columns yet; table is still operationally active for diagnostics lifecycle and should be retired only after run-creation ownership is redesigned.
+- **Decision in this run:** do not hard-drop yet; remaining dependency is narrow diagnostics/lifecycle + generation-context ownership in GET and is now isolated for a final replacement run.
 
 ### `cpq_products` (column-level verdict)
 - **Must keep (direct runtime write/read):** `id`, `import_run_id`, `cpq_ruleset`, `sku_code`, `created_by`, `created_at`.
@@ -193,7 +193,7 @@ Rollback: re-add columns nullable with defaults; no data-critical semantics expe
 ## Stage C (column cleanup wave 2)
 
 1. Completed in migration `019`: final `cpq_products` fallback-coupled payload reduction (`coalesce(..., p.column)` compatibility fields removed from view + matched column drops).
-2. Next target: prune/retire `cpq_import_runs` payload only after diagnostics lifecycle replacement is shipped.
+2. Next target: final `cpq_import_runs` retirement after replacing `/api/cpq/generate` GET run metadata/lifecycle ownership.
 
 Rollback: additive restore migration from backup snapshot.
 
@@ -218,4 +218,4 @@ Rollback: restore table from pre-drop backup or down migration.
 2. Prior low-risk drops remain in place (`016` position placeholders, `017` brake compatibility columns, `018` product identity columns).
 3. Explicit decision to keep `cpq_import_runs` intact until diagnostics ownership replacement.
 
-Recommended next cleanup target: **cpq_import_runs retirement prep**, then `sku_rules` replacement/removal prep.
+Recommended next cleanup target: **final cpq_import_runs replacement/removal run**, then `sku_rules` replacement/removal prep.
