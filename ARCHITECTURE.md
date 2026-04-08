@@ -19,7 +19,7 @@ Authoritative DB truth is the CSV snapshots, not `sql/schema.sql`.
 
 Architecture-impacting gaps:
 1. `sql/schema.sql` omits multiple runtime-critical tables present in CSV truth.
-2. Runtime writes `role_permission_baselines_audit`, but CSV truth does not include it.
+2. Runtime writes `role_permission_baselines_audit`; this run reconciles CSV truth and migration truth so the table is now explicitly supported.
 3. `sku_rules` remains physical legacy schema despite runtime replacement by canonical CPQ import rows.
 
 Implication:
@@ -56,10 +56,10 @@ Implication:
 ## 5) Cleanup architecture strategy
 
 ## Priority 1 (correctness)
-Resolve mismatch for `role_permission_baselines_audit` to avoid runtime write failures.
+Keep/support `role_permission_baselines_audit` to avoid runtime write failures in CSV-truth environments.
 
 ## Priority 2 (safe reduction)
-Prune obvious unused residue columns in canonical tables (`cpq_import_rows.raw_*`).
+Prune obvious unused residue columns in canonical tables (`cpq_import_rows.raw_*`) with rollback posture.
 
 ## Priority 3 (staged modernization)
 - prune `cpq_import_runs` payload,

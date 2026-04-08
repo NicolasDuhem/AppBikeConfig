@@ -19,12 +19,12 @@ Evidence method:
 
 ## 2) DB truth inventory (from CSV)
 
-- **Tables:** 21
-- **Columns:** 210
-- **Constraint rows exported:** 210
-  - CHECK: 134
-  - PRIMARY KEY: 33 (includes duplicate rows for composite keys in export format)
-  - FOREIGN KEY: 27
+- **Tables:** 22
+- **Columns:** 218
+- **Constraint rows exported:** 214
+  - CHECK: 135
+  - PRIMARY KEY: 34 (includes duplicate rows for composite keys in export format)
+  - FOREIGN KEY: 29
   - UNIQUE: 16
 
 Main table families:
@@ -54,12 +54,12 @@ CSV tables missing in baseline schema SQL:
 
 Impact: a new environment created from only `sql/schema.sql` cannot support runtime.
 
-## 3.2 `role_permission_baselines_audit` gap (runtime ↔ DB truth)
+## 3.2 `role_permission_baselines_audit` reconciliation status
 
 - Runtime writes to `role_permission_baselines_audit` in `/api/role-permissions` PATCH.
-- The table exists in repo SQL/migrations (`sql/schema.sql`, `sql/013...`) but **does not exist in CSV DB truth**.
+- This run makes that table explicit in supported truth via migration `sql/014_role_permission_baselines_audit_csv_truth.sql` and CSV-truth inventory updates.
 
-Risk class: **High runtime failure risk** in environments matching CSV truth (PATCH can fail on missing table).
+Risk class: previously high; now mitigated by explicit schema support.
 
 ## 4) Table-level classification and cleanup posture
 
@@ -82,7 +82,7 @@ Risk class: **High runtime failure risk** in environments matching CSV truth (PA
 ## 5.1 High-confidence removal candidates (not referenced by runtime SQL)
 
 ### `cpq_import_rows`
-- `raw_option_name`, `raw_digit`, `raw_code_value`
+- `raw_option_name`, `raw_digit`, `raw_code_value` (removed in migration `sql/015_drop_cpq_import_rows_raw_columns.sql`; rollback is additive restore SQL in-file)
 - Rationale: no runtime reads/writes in API logic; likely import-diagnostics residue.
 
 ### `cpq_import_runs`
@@ -165,17 +165,16 @@ Reasoning:
 
 ## Stage A (next migration, concrete)
 
-1. **Fix truth mismatch for `role_permission_baselines_audit`:**
-   - either add table to DB (preferred if audit needed),
-   - or remove runtime writes and replace with existing `audit_log` event.
-2. Add a protective migration guard + smoke query for this endpoint.
+1. **Completed in this run:** keep/support `role_permission_baselines_audit` as a real DB object.
+2. **Completed in this run:** drop `cpq_import_rows.raw_*` columns with rollback SQL posture.
 
-Rollback: restore previous endpoint behavior or keep writes no-op if table missing.
+Rollback:
+- role baseline audit table is additive/non-breaking and can remain on rollback.
+- raw column rollback uses additive `alter table ... add column` statements documented in `sql/015_drop_cpq_import_rows_raw_columns.sql`.
 
 ## Stage B (column cleanup wave 1)
 
-1. Remove/soft-deprecate `cpq_import_rows.raw_*` columns.
-2. Remove clearly unused metadata timestamps listed above where safe.
+1. Continue post-`cpq_import_rows.raw_*` cleanup on lower-risk metadata timestamps listed above where safe.
 
 Rollback: re-add columns nullable with defaults; no data-critical semantics expected.
 
@@ -202,8 +201,8 @@ Rollback: restore table from pre-drop backup or down migration.
 
 ## 10) Immediate next action (non-vague)
 
-**Run one migration-focused PR next that does exactly these two actions:**
-1. Resolve `role_permission_baselines_audit` runtime/DB-truth mismatch.
-2. Remove `cpq_import_rows.raw_option_name`, `cpq_import_rows.raw_digit`, `cpq_import_rows.raw_code_value`.
+**This run delivered the previously identified migration pair:**
+1. `role_permission_baselines_audit` runtime/DB-truth reconciliation (kept/supported).
+2. Removal of `cpq_import_rows.raw_option_name`, `cpq_import_rows.raw_digit`, `cpq_import_rows.raw_code_value` with rollback SQL.
 
-This yields immediate correctness + low-risk cleanup without touching CPQ critical flows.
+Recommended next cleanup target: `cpq_import_runs` / `cpq_products` cleanup wave (small-batch, reversible).
