@@ -23,7 +23,7 @@ Routing/UI evidence:
 ### 3.1 Canonical SKU definition
 `cpq_import_rows` is the active source for Product - SKU definition and CPQ option hydration.
 
-`cpq_import_row_translations` now provides optional locale overrides per canonical row (`cpq_import_row_id + locale`) managed from the Product - SKU definition > Translations subsection. Locale options come from `cpq_countries.locale_code`.
+`cpq_import_row_translations` provides optional locale overrides per canonical row (`cpq_import_row_id + locale`) managed from Product - SKU definition > Translations. Locale options come from `cpq_countries.locale_code`; writes are limited to configured locales and reads fallback to the first configured locale (default `en-US`).
 
 ### 3.2 Generation and push
 - `/api/cpq/options` reads active `cpq_import_rows` + setup config.

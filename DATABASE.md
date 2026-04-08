@@ -57,7 +57,7 @@ Runtime-grounded schema inventory for AppBikeConfig. This document captures what
 ## 4) Drift and uncertainty notes
 
 - `cpq_import_runs` is still reachable for diagnostics but creation path appears external/retired in this repo.
-- `cpq_import_row_translations` is now consumed by `/api/sku-rule-translations` and `/sku-definition` translations subsection.
+- `cpq_import_row_translations` is consumed by `/api/sku-rule-translations` and `/sku-definition` > Translations; API locale writes are constrained to locales configured on `cpq_countries.locale_code`, while reads auto-fallback to the first managed locale (or `en-US`).
 - Legacy tables/routes remain reachable whenever `import_csv_cpq` is false.
 - `/api/countries` is now telemetry-instrumented as a compatibility endpoint and should not be extended for new features.
 
