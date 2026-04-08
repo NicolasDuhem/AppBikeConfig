@@ -1,4 +1,9 @@
 'use client';
+
+/**
+ * @deprecated Legacy compatibility UI path.
+ * New product UX must target CPQ canonical pages.
+ */
 import { useEffect, useMemo, useState } from 'react';
 import type { MatrixRow, Country } from '@/lib/types';
 

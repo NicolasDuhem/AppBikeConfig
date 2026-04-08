@@ -1,8 +1,13 @@
 import { NextResponse } from 'next/server';
+
+/**
+ * @deprecated Legacy compatibility API path.
+ * New product work must target CPQ canonical APIs.
+ */
 import { requireApiRole } from '@/lib/api-auth';
 import { upsertMatrixProduct } from '@/lib/matrix-service';
 import { writeAuditLog } from '@/lib/audit';
-import { trackLegacyPathInvocation } from '@/lib/deprecation-telemetry';
+import { LEGACY_PATH_KEYS, trackLegacyPathInvocation } from '@/lib/deprecation-telemetry';
 
 export async function POST(request: Request) {
   const auth = await requireApiRole('matrix.update.single');
@@ -14,7 +19,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'No rows to save' }, { status: 400 });
   }
 
-  await trackLegacyPathInvocation({ pathKey: 'legacy.matrix.save_all', route: '/api/matrix/save-all', method: 'POST', userId: auth.user.id, details: { attempted: rows.length } });
+  await trackLegacyPathInvocation({ pathKey: LEGACY_PATH_KEYS.matrixSaveAll, route: '/api/matrix/save-all', method: 'POST', userId: auth.user.id, details: { attempted: rows.length } });
 
   const failures: Array<{ rowKey: string; sku_code: string; reason: string }> = [];
   const successes: Array<{ id: number; sku_code: string }> = [];

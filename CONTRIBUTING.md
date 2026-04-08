@@ -20,3 +20,9 @@ npm run test
 npm run analyze:db-usage
 npm run check:doc-governance
 ```
+
+
+## Legacy path expansion guardrail
+
+- New behavior must be implemented on canonical CPQ paths unless explicitly scoped as deprecation preparation work.
+- Run `npm run check:legacy-coupling` to detect newly introduced legacy references in your diff.

@@ -1,15 +1,20 @@
 import { NextResponse } from 'next/server';
+
+/**
+ * @deprecated Legacy compatibility API path.
+ * New product work must target CPQ canonical APIs.
+ */
 import { sql } from '@/lib/db';
 import { requireApiLogin, requireApiRole } from '@/lib/api-auth';
 import { writeAuditLog } from '@/lib/audit';
 import { getCountries, upsertMatrixProduct } from '@/lib/matrix-service';
-import { trackLegacyPathInvocation } from '@/lib/deprecation-telemetry';
+import { LEGACY_PATH_KEYS, trackLegacyPathInvocation } from '@/lib/deprecation-telemetry';
 
 export async function GET() {
   const auth = await requireApiLogin();
   if (auth instanceof NextResponse) return auth;
 
-  await trackLegacyPathInvocation({ pathKey: 'legacy.matrix.read', route: '/api/matrix', method: 'GET', userId: auth.user.id });
+  await trackLegacyPathInvocation({ pathKey: LEGACY_PATH_KEYS.matrixRead, route: '/api/matrix', method: 'GET', userId: auth.user.id });
 
   const countries = await getCountries();
   const products = await sql`
@@ -41,7 +46,7 @@ export async function POST(request: Request) {
   const product = body.product || {};
   const availability = body.availability || {};
 
-  await trackLegacyPathInvocation({ pathKey: 'legacy.matrix.write', route: '/api/matrix', method: 'POST', userId: auth.user.id, details: { hasAvailability: Object.keys(availability).length > 0 } });
+  await trackLegacyPathInvocation({ pathKey: LEGACY_PATH_KEYS.matrixWrite, route: '/api/matrix', method: 'POST', userId: auth.user.id, details: { hasAvailability: Object.keys(availability).length > 0 } });
 
   const result = await upsertMatrixProduct(product, availability);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
