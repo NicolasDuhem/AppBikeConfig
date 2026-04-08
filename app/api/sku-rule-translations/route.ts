@@ -2,28 +2,14 @@ import { NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { requireApiLogin, requireApiRole } from '@/lib/api-auth';
 import { writeAuditLog } from '@/lib/audit';
+import { normalizeLocale, resolveManagedLocale } from '@/lib/cpq-translation-locales';
 
 type TranslationPatch = {
   cpq_import_row_id: number;
   translated_value: string;
 };
 
-function normalizeLocale(value: string) {
-  return value.trim();
-}
-
-export async function GET(request: Request) {
-  const auth = await requireApiLogin();
-  if (auth instanceof NextResponse) return auth;
-
-  const { searchParams } = new URL(request.url);
-  const locale = normalizeLocale(String(searchParams.get('locale') || ''));
-  const includeInactive = searchParams.get('include_inactive') === '1';
-
-  if (!locale) {
-    return NextResponse.json({ error: 'locale is required' }, { status: 400 });
-  }
-
+async function fetchManagedLocales() {
   const localeRows = await sql`
     select distinct nullif(trim(locale_code), '') as locale
     from cpq_countries
@@ -31,8 +17,17 @@ export async function GET(request: Request) {
     order by locale
   ` as Array<{ locale: string | null }>;
 
-  const locales = localeRows.map((row) => String(row.locale || '').trim()).filter(Boolean);
-  if (!locales.length) locales.push('en-US');
+  return localeRows.map((row) => normalizeLocale(String(row.locale || ''))).filter(Boolean);
+}
+
+export async function GET(request: Request) {
+  const auth = await requireApiLogin();
+  if (auth instanceof NextResponse) return auth;
+
+  const { searchParams } = new URL(request.url);
+  const requestedLocale = normalizeLocale(String(searchParams.get('locale') || ''));
+  const includeInactive = searchParams.get('include_inactive') === '1';
+  const { locale, locales } = resolveManagedLocale(requestedLocale, await fetchManagedLocales());
 
   const rows = includeInactive
     ? await sql`
@@ -90,25 +85,40 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'locale is required' }, { status: 400 });
   }
 
+  const managedLocales = await fetchManagedLocales();
+  const { locales } = resolveManagedLocale('', managedLocales);
+  if (!locales.includes(locale)) {
+    return NextResponse.json({ error: 'locale is not configured on cpq_countries' }, { status: 400 });
+  }
+
   if (!updates.length) {
     return NextResponse.json({ error: 'updates are required' }, { status: 400 });
   }
+
+  const candidateRowIds = Array.from(new Set(
+    updates
+      .map((entry) => Number(entry.cpq_import_row_id || 0))
+      .filter((value) => Number.isInteger(value) && value > 0)
+  ));
+
+  if (!candidateRowIds.length) {
+    return NextResponse.json({ error: 'valid cpq_import_row_id values are required' }, { status: 400 });
+  }
+
+  const canonicalRows = await sql`
+    select id
+    from cpq_import_rows
+    where status = 'imported'
+      and id = any(${candidateRowIds})
+  ` as Array<{ id: number }>;
+  const canonicalRowIdSet = new Set(canonicalRows.map((row) => Number(row.id)));
 
   const saved: Array<{ cpq_import_row_id: number; translated_value: string }> = [];
   const cleared: number[] = [];
 
   for (const entry of updates) {
     const cpqImportRowId = Number(entry.cpq_import_row_id || 0);
-    if (!cpqImportRowId) continue;
-
-    const exists = await sql`
-      select id
-      from cpq_import_rows
-      where id = ${cpqImportRowId}
-        and status = 'imported'
-      limit 1
-    ` as any[];
-    if (!exists.length) continue;
+    if (!canonicalRowIdSet.has(cpqImportRowId)) continue;
 
     const translatedValue = String(entry.translated_value || '').trim();
 

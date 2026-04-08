@@ -35,7 +35,7 @@ Runtime process/data-flow reference for AppBikeConfig.
 - Reads: `cpq_import_rows`, `cpq_import_row_translations`, `cpq_countries` (locale catalog), `audit_log`, `app_users`, `cpq_product_attributes` (delete guard).
 - Writes: `cpq_import_rows`, `cpq_import_row_translations`, `audit_log`.
 - Feature flags: not directly gated; functionally part of CPQ direction.
-- Rollback/failure semantics: reject duplicates, block delete when references exist; translation rows are optional and fallback to canonical `choice_value` when missing.
+- Rollback/failure semantics: reject duplicates, block delete when references exist; translation rows are optional and fallback to canonical `choice_value` when missing. Translation writes reject locales not configured on `cpq_countries`, and translation reads resolve to the first configured locale when a requested locale is absent.
 
 ## 5) Product setup
 
