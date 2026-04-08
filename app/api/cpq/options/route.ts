@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { requireApiRole } from '@/lib/api-auth';
 import { sql } from '@/lib/db';
 import { mapOptionNameToCanonical } from '@/lib/cpq-core';
+import { normalizeLocale } from '@/lib/cpq-translation-locales';
+import { resolveCpqRuntimeLocale } from '@/lib/cpq-runtime-locale';
 
 type RawOptionRow = {
   cpq_import_row_id: number;
@@ -9,15 +11,26 @@ type RawOptionRow = {
   option_name: string;
   code_value: string;
   choice_value: string;
+  translated_choice_value: string | null;
 };
 
 function canonicalOptionName(optionName: string) {
   return mapOptionNameToCanonical(optionName) || optionName;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const auth = await requireApiRole('builder.use');
   if (auth instanceof NextResponse) return auth;
+
+  const { searchParams } = new URL(request.url);
+  const requestedLocale = normalizeLocale(String(searchParams.get('locale') || ''));
+  const requestedCountry = String(searchParams.get('country') || '').trim();
+  const requestedCountryId = Number(searchParams.get('country_id') || 0);
+  const localeResolution = await resolveCpqRuntimeLocale({
+    requestedLocale,
+    countryName: requestedCountry || null,
+    countryId: requestedCountryId > 0 ? requestedCountryId : null
+  });
 
   const [rawRows, configs, rules] = await Promise.all([
     sql`
@@ -26,8 +39,12 @@ export async function GET() {
         r.digit_position,
         r.option_name,
         r.code_value,
-        r.choice_value
+        r.choice_value,
+        nullif(trim(t.translated_value), '') as translated_choice_value
       from cpq_import_rows r
+      left join cpq_import_row_translations t
+        on t.cpq_import_row_id = r.id
+       and t.locale = ${localeResolution.locale}
       where r.status = 'imported'
         and coalesce(r.is_active, true) = true
       order by r.digit_position, r.option_name, r.code_value, r.id desc
@@ -52,7 +69,7 @@ export async function GET() {
 
   for (const row of rows) {
     const optionName = canonicalOptionName(String(row.option_name || '').trim());
-    const choiceValue = String(row.choice_value || '').trim();
+    const choiceValue = String(row.translated_choice_value || row.choice_value || '').trim();
     if (!optionName || !choiceValue) continue;
 
     if (Number(row.digit_position) === 0 && singleValueOptionNames.has(optionName)) {
@@ -100,6 +117,9 @@ export async function GET() {
     }));
 
   return NextResponse.json({
+    locale: localeResolution.locale,
+    localeSource: localeResolution.source,
+    locales: localeResolution.locales,
     productFieldOptions: {
       productAssist: singleValueOptions.get('ProductAssist') || ['Electric', 'Non electric'],
       productFamily: singleValueOptions.get('ProductFamily') || ['Bike', 'P&A'],
