@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { requireApiRole } from '@/lib/api-auth';
 import { writeAuditLog } from '@/lib/audit';
+import { trackLegacyPathInvocation } from '@/lib/deprecation-telemetry';
 
 export async function POST(request: Request) {
   const auth = await requireApiRole('matrix.update.bulk');
@@ -16,6 +17,8 @@ export async function POST(request: Request) {
     : null;
 
   if (!countryId) return NextResponse.json({ error: 'country_id is required' }, { status: 400 });
+
+  await trackLegacyPathInvocation({ pathKey: 'legacy.matrix.bulk_update', route: '/api/matrix/bulk-update', method: 'POST', userId: auth.user.id, details: { countryId, byProductIds: !!productIds?.length } });
 
   const products = productIds?.length
     ? await sql`select id from products where id = any(${productIds})`

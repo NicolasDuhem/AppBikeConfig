@@ -1,0 +1,199 @@
+{
+  "generated_at": "2026-04-07T21:32:48.473Z",
+  "object_count": 24,
+  "objects": [
+    {
+      "object": "app_users",
+      "discovered_from": [
+        "app/api/sku-rules/route.ts",
+        "app/api/users/route.ts",
+        "lib/auth.ts",
+        "lib/feature-flags.ts",
+        "sql/002_auth_rbac.sql"
+      ]
+    },
+    {
+      "object": "audit_log",
+      "discovered_from": [
+        "app/api/sku-rules/route.ts"
+      ]
+    },
+    {
+      "object": "availability",
+      "discovered_from": [
+        "app/api/matrix/route.ts"
+      ]
+    },
+    {
+      "object": "countries",
+      "discovered_from": [
+        "app/api/builder-push/route.ts",
+        "app/api/countries/route.ts",
+        "app/api/matrix/route.ts",
+        "lib/matrix-service.ts",
+        "sql/006_cpq_matrix_tables.sql",
+        "sql/seed.sql"
+      ]
+    },
+    {
+      "object": "cpq_availability",
+      "discovered_from": [
+        "app/api/cpq-matrix/route.ts"
+      ]
+    },
+    {
+      "object": "cpq_countries",
+      "discovered_from": [
+        "app/api/cpq-matrix/bulk-update/route.ts",
+        "app/api/cpq-matrix/route.ts",
+        "app/api/cpq/push/route.ts",
+        "lib/cpq-matrix-service.ts"
+      ]
+    },
+    {
+      "object": "cpq_import_rows",
+      "discovered_from": [
+        "app/api/cpq/generate/route.ts",
+        "app/api/cpq/options/route.ts",
+        "app/api/cpq/push/route.ts",
+        "app/api/product-setup/route.ts",
+        "app/api/sku-rules/route.ts",
+        "sql/010_cpq_normalized_attributes_and_translations.sql",
+        "sql/013_cpq_import_rows_canonical_and_role_baseline.sql"
+      ]
+    },
+    {
+      "object": "cpq_import_runs",
+      "discovered_from": [
+        "app/api/cpq/generate/route.ts"
+      ]
+    },
+    {
+      "object": "cpq_product_assets",
+      "discovered_from": [
+        "app/api/cpq-matrix/picture/route.ts",
+        "app/api/cpq-matrix/route.ts"
+      ]
+    },
+    {
+      "object": "cpq_product_attributes",
+      "discovered_from": [
+        "app/api/sku-rules/route.ts",
+        "sql/010_cpq_normalized_attributes_and_translations.sql"
+      ]
+    },
+    {
+      "object": "cpq_products",
+      "discovered_from": [
+        "app/api/cpq/push/route.ts",
+        "sql/010_cpq_normalized_attributes_and_translations.sql"
+      ]
+    },
+    {
+      "object": "cpq_products_flat",
+      "discovered_from": [
+        "app/api/cpq-matrix/route.ts"
+      ]
+    },
+    {
+      "object": "cpq_sku_rules",
+      "discovered_from": [
+        "app/api/cpq-matrix/bulk-update/route.ts",
+        "app/api/cpq-matrix/picture/route.ts",
+        "app/api/cpq-matrix/route.ts",
+        "app/api/cpq/push/route.ts",
+        "lib/cpq-matrix-service.ts"
+      ]
+    },
+    {
+      "object": "feature_flags",
+      "discovered_from": [
+        "app/api/feature-flags/route.ts",
+        "lib/feature-flags.ts"
+      ]
+    },
+    {
+      "object": "permissions",
+      "discovered_from": [
+        "app/api/permissions/route.ts",
+        "app/api/role-permissions/route.ts",
+        "app/api/users/route.ts",
+        "lib/auth.ts",
+        "sql/012_permissions_and_sku_generation_config.sql",
+        "sql/seed.sql"
+      ]
+    },
+    {
+      "object": "products",
+      "discovered_from": [
+        "app/api/matrix/bulk-update/route.ts",
+        "app/api/matrix/route.ts",
+        "lib/matrix-service.ts",
+        "sql/seed.sql"
+      ]
+    },
+    {
+      "object": "role_permissions",
+      "discovered_from": [
+        "app/api/role-permissions/route.ts",
+        "lib/auth.ts"
+      ]
+    },
+    {
+      "object": "roles",
+      "discovered_from": [
+        "app/api/role-permissions/route.ts",
+        "app/api/roles/route.ts",
+        "app/api/users/route.ts",
+        "lib/auth.ts",
+        "sql/002_auth_rbac.sql"
+      ]
+    },
+    {
+      "object": "setup_options",
+      "discovered_from": [
+        "app/api/setup-options/route.ts"
+      ]
+    },
+    {
+      "object": "sku_digit_option_config",
+      "discovered_from": [
+        "app/api/cpq/generate/route.ts",
+        "app/api/cpq/options/route.ts",
+        "app/api/product-setup/route.ts"
+      ]
+    },
+    {
+      "object": "sku_generation_dependency_rules",
+      "discovered_from": [
+        "app/api/cpq/generate/route.ts",
+        "app/api/cpq/options/route.ts",
+        "app/api/product-setup/route.ts"
+      ]
+    },
+    {
+      "object": "sku_rules",
+      "discovered_from": [
+        "sql/003_sku_rule_activation_and_constraints.sql",
+        "sql/011_seed_delete111.sql",
+        "sql/012_permissions_and_sku_generation_config.sql",
+        "sql/013_cpq_import_rows_canonical_and_role_baseline.sql",
+        "sql/seed.sql"
+      ]
+    },
+    {
+      "object": "user_permissions",
+      "discovered_from": [
+        "app/api/users/route.ts",
+        "lib/auth.ts"
+      ]
+    },
+    {
+      "object": "user_roles",
+      "discovered_from": [
+        "app/api/users/route.ts",
+        "lib/auth.ts"
+      ]
+    }
+  ]
+}

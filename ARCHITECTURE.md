@@ -1,116 +1,64 @@
 # AppBikeConfig Architecture
 
-## 1) Architectural baseline
+## 1) Runtime architecture (validated)
 
-AppBikeConfig currently runs as a **dual-track architecture**:
+AppBikeConfig is actively running a **dual-track runtime** controlled by `feature_flags.import_csv_cpq`:
 
-1. **CPQ canonical track (primary direction):**
-   - Canonical SKU definition rows in `cpq_import_rows`.
-   - Normalized generated product attributes through `cpq_product_attributes`.
-   - CPQ sales matrix in `cpq_sku_rules` + `cpq_availability` + `cpq_countries`.
+- **CPQ canonical track (primary):** `/cpq-feature`, `/cpq-matrix`, `/api/cpq/*`, `/api/cpq-matrix/*`, canonical rows in `cpq_import_rows`, normalized attributes in `cpq_product_attributes`, and sales matrix in `cpq_sku_rules` + `cpq_availability` + `cpq_countries`.
+- **Legacy compatibility track (fallback):** `/matrix`, `/api/matrix*`, `/api/builder-push`, and legacy tables `products` + `availability` + `countries`.
 
-2. **Legacy compatibility track (feature-flag fallback):**
-   - Legacy matrix tables `products`, `countries`, `availability`.
-   - Legacy builder endpoint `/api/builder-push`.
+Routing/UI evidence:
+- `components/app-navigation.tsx` switches Matrix target by `import_csv_cpq` and hides legacy builder when CPQ is on.
+- `app/matrix/page.tsx` redirects to `/cpq-matrix` when CPQ flag is enabled.
+- `app/cpq-feature/page.tsx` redirects to legacy builder when CPQ flag is disabled.
 
-The runtime switch is primarily `feature_flags.import_csv_cpq` (public feature flag endpoint consumed by nav/pages).
+## 2) Identity, RBAC, and audit
 
----
+- Auth source: `app_users` via credentials provider in `lib/auth.ts`.
+- Effective permissions merge role baseline (`role_permissions`) and user overrides (`user_permissions`).
+- Operational writes record to `audit_log` through `lib/audit.ts`.
 
-## 2) Core domains and ownership
+## 3) Canonical data model status
 
-## 2.1 Identity and authorization
-- Auth provider: credentials against `app_users`.
-- RBAC model: `roles`, `user_roles`, `permissions`, `role_permissions`, `user_permissions`.
-- Effective permission resolution merges role baseline + user overrides.
-- Audit trail for operational writes stored in `audit_log`.
+### 3.1 Canonical SKU definition
+`cpq_import_rows` is the active source for Product - SKU definition and CPQ option hydration.
 
-## 2.2 CPQ canonical data model
+### 3.2 Generation and push
+- `/api/cpq/options` reads active `cpq_import_rows` + setup config.
+- `/api/cpq/generate` POST builds combinations in-memory.
+- `/api/cpq/push` persists to `cpq_products`, `cpq_product_attributes`, `cpq_sku_rules`, `cpq_availability`.
 
-### Canonical definition source
-- `cpq_import_rows` is the operational source for Product - SKU definition and Product - Create SKU option generation.
-- Active lifecycle fields: `is_active`, `deactivated_at`, `deactivation_reason`, `updated_at`, `updated_by`, `source`.
+### 3.3 Matrix runtime
+- CPQ matrix reads from `cpq_sku_rules`, `cpq_products_flat`, `cpq_product_assets`, and `cpq_availability`.
+- Legacy matrix reads from `products`, `countries`, `availability`.
 
-### Normalized generated products
-- `cpq_products` stores product identity (`id`, `sku_code`, run/ruleset context).
-- `cpq_product_attributes` stores option references (`option_name` -> `cpq_import_row_id`).
-- `cpq_products_flat` is a compatibility/read view that resolves attribute text values from normalized references (with fallback to old `cpq_products` text columns).
+## 4) Legacy/deprecation observability
 
-### Sales matrix (CPQ)
-- `cpq_sku_rules` stores sellable rows scoped by `(sku_code, cpq_ruleset, brake_type)` and includes `bc_status`.
-- `cpq_availability` stores country enablement.
-- `cpq_countries` stores country + region + brake orientation.
-- Optional media layer: `cpq_product_assets` (feature-flagged picture picker path).
+A shared telemetry helper now records deprecation-candidate path usage into `audit_log` with `action_key='deprecation.path_invoked'` and `entity_type='legacy_runtime_path'`.
 
-## 2.3 Configuration domains
-- `sku_digit_option_config`: required/multi-single behavior for each digit.
-- `sku_generation_dependency_rules`: currently match-code dependency constraints between digits.
+Instrumented paths:
+- `/api/matrix` (GET/POST)
+- `/api/matrix/save-all`
+- `/api/matrix/bulk-update`
+- `/api/matrix/check-bc-status`
+- `/api/builder-push`
+- `/api/setup-options` (GET/POST/DELETE)
+- `/api/cpq/generate` GET (`run_id` diagnostics path tied to `cpq_import_runs`)
 
-## 2.4 Feature management
-- `feature_flags` runtime gating.
-- `feature_flag_audit` change log.
+## 5) Active vs compatibility vs uncertain
 
----
+- **Active canonical:** `cpq_import_rows`, `cpq_product_attributes`, `cpq_sku_rules`, `cpq_countries`, `cpq_availability`, `sku_digit_option_config`, `sku_generation_dependency_rules`.
+- **Compatibility still runtime-reachable:** `products`, `countries`, `availability`, `/api/builder-push`, `/api/setup-options`.
+- **Partial migration-era:** `cpq_import_runs` (GET diagnostics updates still reachable; no in-repo create flow).
+- **Likely unused in repo:** `cpq_import_row_translations` (no runtime references found).
 
-## 3) Runtime process architecture
+## 6) Documentation governance
 
-## 3.1 Product - SKU definition
-- UI: `/sku-definition`
-- API: `/api/sku-rules`
-- Reads/writes canonical rows directly in `cpq_import_rows`.
-- Delete protection checks `cpq_product_attributes` references.
+Any data behavior change must update both:
+- `DATABASE.md` (schema/data reality)
+- `PROCESSDATA.md` (runtime process flow)
 
-## 3.2 Product - Setup
-- UI: `/setup`
-- API: `/api/product-setup`
-- Maintains generation metadata tables (`sku_digit_option_config`, `sku_generation_dependency_rules`).
-
-## 3.3 Product - Create SKU
-- UI: `/cpq-feature`
-- APIs:
-  - `/api/cpq/options` (hydrate active canonical options)
-  - `/api/cpq/generate` (compose combinations)
-  - `/api/cpq/push` (persist generated rows to CPQ matrix path)
-
-## 3.4 Sales - SKU vs Country
-- UI: `/cpq-matrix` (when CPQ flag ON) or `/matrix` (legacy fallback).
-- CPQ APIs under `/api/cpq-matrix/*` perform single save, batch save, bulk country toggle, BC status checks, and picture attachment.
-
-## 3.5 Admin - Users / permissions baseline
-- UI: `/users`
-- APIs:
-  - `/api/users`, `/api/roles`, `/api/permissions`
-  - `/api/role-permissions` for standard role baseline management
-- Baseline changes append `role_permission_baselines_audit`.
-
----
-
-## 4) Constraints relied on by architecture
-
-- Active canonical uniqueness on `cpq_import_rows` structural key.
-- Active CPQ matrix uniqueness on `cpq_sku_rules` (`sku_code`, `cpq_ruleset`, `brake_type`).
-- Composite PKs on availability tables for idempotent upsert.
-- RBAC FKs for permission integrity.
-- DB check constraints for brake types, bc status, digit bounds, dependency rule types.
-
----
-
-## 5) Known compatibility/legacy surfaces
-
-1. `products`/`countries`/`availability` legacy matrix tables remain active in fallback mode.
-2. `sku_rules` remains legacy; canonical operational source is now `cpq_import_rows`.
-3. `cpq_import_runs` remains partially active for run-scoped generation diagnostics.
-4. `setup_options` route/table remains available but not central in current Product - Setup UX.
-5. `cpq_import_row_translations` exists but currently has no runtime path.
-
----
-
-## 6) Documentation governance (required)
-
-From now on, every project change that affects data behavior must update:
-
-- `DATABASE.md` → **data/schema knowledge** (tables, columns, constraints, status, cleanup candidates)
-- `PROCESSDATA.md` → **process/data-flow knowledge** (trigger, reads, writes, field updates, validations, outputs)
-
-This is mandatory for maintainability and safe deprecation planning.
-
+Guardrails added:
+- `CONTRIBUTING.md` checklist
+- `.github/pull_request_template.md` checklist
+- `scripts/check-doc-governance.mjs`

@@ -25,6 +25,9 @@ Run in this order:
 8. `sql/007_cpq_digit0_and_sku_rule_edit_audit.sql`
 9. `sql/008_cpq_import_diagnostics.sql`
 10. `sql/009_cpq_bdam_picture_picker.sql` (CPQ BDAM picker asset persistence)
+11. `sql/010_cpq_normalized_attributes_and_translations.sql`
+12. `sql/012_permissions_and_sku_generation_config.sql`
+13. `sql/013_cpq_import_rows_canonical_and_role_baseline.sql`
 
 ## Environment variables
 
@@ -170,3 +173,21 @@ Then manually test:
 
 - See `docs/cpq-bdam-picture-picker.md` for the feature-flagged CPQ Matrix BDAM picker flow.
 - This version is iframe/manual-capture only (no server-side BDAM API integration).
+
+
+## Documentation governance
+
+Data/process behavior changes must update:
+- `DATABASE.md`
+- `PROCESSDATA.md`
+
+Helpful commands:
+
+```bash
+npm run analyze:db-usage
+npm run check:doc-governance
+```
+
+Generated analysis artifacts:
+- `docs/generated/db-usage-report.md`
+- `docs/database-runtime-inventory.json`

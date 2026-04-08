@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { requireApiRole } from '@/lib/api-auth';
 import { writeAuditLog } from '@/lib/audit';
+import { trackLegacyPathInvocation } from '@/lib/deprecation-telemetry';
 
 export async function POST(request: Request) {
   const auth = await requireApiRole('builder.push');
@@ -9,6 +10,8 @@ export async function POST(request: Request) {
 
   const body = await request.json();
   const rows = Array.isArray(body.rows) ? body.rows : [];
+  await trackLegacyPathInvocation({ pathKey: 'legacy.builder_push', route: '/api/builder-push', method: 'POST', userId: auth.user.id, details: { rowCount: rows.length } });
+
   let pushed = 0;
 
   for (const row of rows) {

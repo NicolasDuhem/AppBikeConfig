@@ -2,10 +2,14 @@ import { NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { requireApiLogin, requireApiRole } from '@/lib/api-auth';
 import { writeAuditLog } from '@/lib/audit';
+import { trackLegacyPathInvocation } from '@/lib/deprecation-telemetry';
 
 export async function GET() {
   const auth = await requireApiLogin();
   if (auth instanceof NextResponse) return auth;
+
+  await trackLegacyPathInvocation({ pathKey: 'legacy.setup_options.read', route: '/api/setup-options', method: 'GET', userId: auth.user.id });
+
 
   const rows = await sql`select id, option_name, choice_value, sort_order from setup_options order by option_name, sort_order, choice_value`;
   return NextResponse.json(rows);
@@ -20,6 +24,8 @@ export async function POST(request: Request) {
   const choiceValue = String(body.choice_value || '').trim();
   const sortOrder = Number(body.sort_order || 0);
   if (!optionName || !choiceValue) return NextResponse.json({ error: 'option_name and choice_value are required' }, { status: 400 });
+
+  await trackLegacyPathInvocation({ pathKey: 'legacy.setup_options.write', route: '/api/setup-options', method: 'POST', userId: auth.user.id });
   const rows = await sql`
     insert into setup_options (option_name, choice_value, sort_order)
     values (${optionName}, ${choiceValue}, ${sortOrder})
@@ -44,6 +50,8 @@ export async function DELETE(request: Request) {
   const { searchParams } = new URL(request.url);
   const id = Number(searchParams.get('id') || 0);
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
+
+  await trackLegacyPathInvocation({ pathKey: 'legacy.setup_options.delete', route: '/api/setup-options', method: 'DELETE', userId: auth.user.id, details: { id } });
 
   const oldRows = await sql`select id, option_name, choice_value, sort_order from setup_options where id = ${id}` as any[];
   await sql`delete from setup_options where id = ${id}`;
