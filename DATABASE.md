@@ -2,72 +2,159 @@
 
 ## Purpose
 
-Runtime-grounded schema inventory for AppBikeConfig. This document captures what is actively used vs compatibility vs deprecation-candidate behavior.
+Runtime-grounded schema inventory for AppBikeConfig after CPQ-only runtime cutover.
+
+This document distinguishes:
+- active operational tables/views,
+- compatibility/deprecation tables still present in schema,
+- transitional/historical artifacts.
 
 > Rule: every data behavior change must update both `DATABASE.md` and `PROCESSDATA.md`.
 
-## 1) Object status inventory
+## 1) Runtime status inventory (CPQ-only runtime)
 
-| Object | Classification | Certainty | Notes |
-|---|---|---|---|
-| `app_users`, `roles`, `user_roles`, `permissions`, `role_permissions`, `user_permissions` | Active | High | Auth + RBAC runtime.
-| `audit_log` | Active | High | Primary write audit + deprecation telemetry sink.
-| `feature_flags`, `feature_flag_audit` | Active | High | CPQ/legacy switch + flag administration.
-| `cpq_import_rows` | Active (canonical) | High | SKU definition + CPQ option source + push reference rows.
-| `cpq_product_attributes` | Active | High | Normalized option mapping from generated products.
-| `cpq_products` | Active (with legacy payload columns) | High | CPQ product identity persists; many text columns compatibility-only.
-| `cpq_products_flat` (view) | Active compatibility projection | High | CPQ matrix read joins rely on it.
-| `cpq_sku_rules`, `cpq_countries`, `cpq_availability` | Active | High | CPQ matrix runtime core. `cpq_countries.locale_code` drives translation locale selection.|
-| `cpq_product_assets` | Active (feature-flagged writes) | High | Picture picker persistence.
-| `sku_digit_option_config`, `sku_generation_dependency_rules` | Active | High | Product setup + generation validation.
-| `role_permission_baselines_audit` | Active | High | Role baseline PATCH appends rows.
-| `products`, `countries`, `availability` | Compatibility only | High | Legacy matrix + builder push when CPQ flag is off.
-| `setup_options` | Compatibility only / partial | High | Legacy setup API still reachable.
-| `sku_rules` | Partial / migration-era | Medium | Used by migrations/seed/backfill, not main runtime APIs.
-| `cpq_import_runs` | Partial / migration-era | High | `/api/cpq/generate?run_id=` still reads/writes status.
-| `cpq_import_row_translations` | Active | High | Locale translation overrides for canonical `cpq_import_rows` choices via `/api/sku-rule-translations`; consumed at runtime by `/api/cpq/options`.|
+| Object | Classification | Certainty | Operational notes |
+|---|---|---:|---|
+| `app_users`, `roles`, `user_roles`, `permissions`, `role_permissions`, `user_permissions` | Active | High | AuthN/AuthZ runtime and admin management baseline. |
+| `audit_log` | Active | High | Authoritative audit stream for operational writes and compatibility telemetry. |
+| `feature_flags`, `feature_flag_audit` | Active (partial runtime) | High | Feature-flag administration remains active; `import_csv_cpq` no longer controls runtime path selection. |
+| `cpq_import_rows` | Active (canonical) | High | Canonical SKU-definition option source; generation input; delete guards and activation lifecycle. |
+| `cpq_import_row_translations` | Active | High | Locale overlays for canonical options; runtime read by `/api/cpq/options`. |
+| `cpq_products` | Active | High | Generated product identity and metadata persistence; source for flattened matrix view. |
+| `cpq_product_attributes` | Active | High | Normalized per-product option-value store, upserted during CPQ push. |
+| `cpq_products_flat` (view) | Active | High | Matrix read projection used for CPQ matrix table rendering. |
+| `cpq_sku_rules`, `cpq_availability`, `cpq_countries` | Active | High | Core sales SKU-vs-country runtime model including brake-type constraints and locale-code mapping. |
+| `cpq_product_assets` | Active (flag-scoped writes) | High | CPQ BDAM/picture metadata persistence when picture-picker feature flag permits writes. |
+| `sku_digit_option_config`, `sku_generation_dependency_rules` | Active | High | Product Setup control plane for digit rules and generation dependency logic. |
+| `role_permission_baselines_audit` | Active | High | Role-permission baseline mutation audit trail. |
+| `cpq_import_runs` | Partial/transitional | High | Diagnostics/import-run status still referenced by `/api/cpq/generate?run_id=`; not a primary CPQ runtime path. |
+| `products`, `countries`, `availability` | Compatibility/deprecation | High | Legacy model tables still present; no longer standard runtime model after CPQ-only cutover. |
+| `setup_options` | Compatibility/deprecation | High | Legacy setup storage; superseded by CPQ setup tables in runtime model. |
+| `sku_rules` | Transitional/historical | Medium | Legacy/migration support and backfill usage; not canonical runtime model. |
 
-## 2) High-value column usage notes
+## 2) CPQ-active tables: column-level runtime usage
 
-### `cpq_import_rows`
-- Actively used: `id`, `import_run_id`, `option_name`, `choice_value`, `digit_position`, `code_value`, `status`, `is_active`, `deactivated_at`, `deactivation_reason`, `updated_at`, `updated_by`, `source`, `action_attempted`.
-- Diagnostics/legacy-oriented: `reason`, raw import columns.
+### 2.1 `cpq_import_rows` (canonical option source)
 
-### `cpq_products`
-- Active runtime columns: `id`, `import_run_id`, `cpq_ruleset`, `brake_reverse`, `brake_non_reverse`, `sku_code`, `created_by`, `created_at`.
-- Compatibility-only columns (current runtime mostly reads via `cpq_products_flat`): attribute text payload columns such as `product_assist`, `product_family`, `product_line`, `product_model`, `product_type`, `handlebar_type`, `speeds`, `mudguards_and_rack`, `main_frame_colour`, `rear_frame_colour`, `lighting`, `saddle_height`, `gear_ratio`, `tyre`, `brakes`, `pedals`, `saddlebag`, `suspension`, `toolkit`, `saddle_light`, `config_code`, `option_box`, `frame_material`, `frame_set`, `component_colour`, `on_bike_accessories`, `handlebar_stem_colour`, `handlebar_pin_colour`, `front_frame_colour`, `front_fork_colour`, plus legacy text columns like `description`, `position29`, `position30`.
+High-value active columns:
+- identity/lifecycle: `id`, `status`, `is_active`, `deactivated_at`, `deactivation_reason`
+- option identity: `option_name`, `choice_value`, `digit_position`, `code_value`
+- provenance/ops: `import_run_id`, `source`, `action_attempted`, `updated_at`, `updated_by`
 
-### `cpq_import_runs`
-- Runtime-relevant fields in GET diagnostic path: `id`, `selected_line`, `electric_type`, `is_special`, `special_edition_name`, `character_17`, `file_name`, `current_phase`, `status`, `error_message`, `error_stack`, `completed_at`, `failed_at`.
+Operational role:
+- powers SKU-definition UI,
+- provides option sets to `/api/cpq/options`,
+- participates in generation/push canonical mapping.
 
+### 2.2 `cpq_import_row_translations` (locale overlays)
 
-### `cpq_import_row_translations`
-- Active fields: `cpq_import_row_id`, `locale`, `translated_value`, `created_at`, `updated_at`, `created_by`, `updated_by`.
-- Runtime behavior: optional per-locale override of canonical `cpq_import_rows.choice_value`; blank/missing translation falls back to canonical text.
-- Consumption path: `/api/cpq/options` resolves runtime locale (request locale -> country default locale -> managed default) and applies translation overlays without mutating canonical rows.
+Active columns:
+- keying: `cpq_import_row_id`, `locale`
+- payload: `translated_value`
+- audit/provenance: `created_at`, `created_by`, `updated_at`, `updated_by`
 
-## 3) Critical constraints relied on by runtime
+Operational role:
+- optional locale-specific value replacement for `choice_value` only at runtime read time,
+- never mutates canonical source rows,
+- fallback to canonical value on missing/blank translation.
 
-- `cpq_import_rows_active_structural_uniq` (active canonical uniqueness).
-- `cpq_sku_rules_active_unique` (active matrix uniqueness by `sku_code + cpq_ruleset + brake_type`).
-- `cpq_product_attributes (cpq_product_id, option_name)` unique upsert contract.
-- `cpq_availability` composite primary key.
-- RBAC FK integrity across users/roles/permissions tables.
-- Domain checks for brake type / status fields in matrix tables.
+### 2.3 `cpq_products` + `cpq_product_attributes`
 
-## 4) Drift and uncertainty notes
+`cpq_products` runtime-critical columns:
+- core: `id`, `sku_code`, `cpq_ruleset`, `import_run_id`, `created_at`, `created_by`
+- brake semantics: `brake_reverse`, `brake_non_reverse`
 
-- `cpq_import_runs` is still reachable for diagnostics but creation path appears external/retired in this repo.
-- `cpq_import_row_translations` is consumed by `/api/sku-rule-translations` and `/sku-definition` > Translations; API locale writes are constrained to locales configured on `cpq_countries.locale_code`, while reads auto-fallback to the first managed locale (or `en-US`).
-- Legacy tables/routes remain reachable whenever `import_csv_cpq` is false.
-- `/api/countries` is now telemetry-instrumented as a compatibility endpoint and should not be extended for new features.
+`cpq_product_attributes` runtime-critical columns:
+- `cpq_product_id`, `option_name`, `option_value`
 
-## 5) Deprecation governance
+Operational role:
+- CPQ push persists product identity and normalized attribute set,
+- matrix projection and filtering rely on these rows (via `cpq_products_flat` and joins).
 
-- Canonical-first rule: new product functionality must use CPQ tables, not `products/countries/availability` or `setup_options`.
-- Retirement gates and sequence: `docs/legacy-deprecation-plan.md`.
+### 2.4 `cpq_sku_rules` + `cpq_availability` + `cpq_countries`
 
-## 6) Generated inventory artifacts
+`cpq_sku_rules`:
+- rule identity and lifecycle: `id`, `cpq_product_id`, `sku_code`, `cpq_ruleset`, `is_active`
+- operational controls: `brake_type`, `bc_status`, editable matrix fields
+
+`cpq_availability`:
+- key: (`cpq_rule_id`, `cpq_country_id`)
+- payload: `available`
+
+`cpq_countries`:
+- country and region model
+- `locale_code` used as runtime locale-default source for option translation resolution
+
+Operational role:
+- authoritative sales availability model for CPQ matrix runtime.
+
+### 2.5 `sku_digit_option_config` + `sku_generation_dependency_rules`
+
+Operational role:
+- controls SKU generation option behavior, required flags, selection mode, ordering, and inter-option dependencies.
+
+## 3) Feature-flag table semantics after cutover
+
+### 3.1 `feature_flags`
+
+- Still active for feature control infrastructure.
+- `cpq_bdam_picture_picker` remains runtime-relevant.
+- `import_csv_cpq` is retained for historical traceability and audit continuity but **is no longer a valid runtime routing or behavior switch**.
+
+### 3.2 `feature_flag_audit`
+
+- Remains required for governance and traceability of flag mutations.
+- Historical records include prior `import_csv_cpq` toggles that explain earlier dual-track behavior.
+
+## 4) Compatibility/deprecation schema area
+
+### 4.1 Legacy matrix schema (`products`, `countries`, `availability`)
+
+Status:
+- retained for transitional safety and controlled retirement,
+- no longer represents the operational runtime model.
+
+Risk note:
+- direct API consumers may still exist outside first-party UI;
+- deprecation telemetry should be used to verify usage before deletion.
+
+### 4.2 Legacy setup schema (`setup_options`)
+
+Status:
+- compatibility-only store.
+- CPQ setup tables are canonical runtime source.
+
+## 5) Runtime-critical constraints and invariants
+
+The following constraints are relied upon by CPQ runtime correctness:
+
+- `cpq_import_rows_active_structural_uniq`:
+  prevents duplicate active canonical option rows by structural key.
+- `cpq_sku_rules_active_unique`:
+  enforces unique active matrix rows by `sku_code + cpq_ruleset + brake_type`.
+- `cpq_product_attributes` uniqueness (`cpq_product_id`, `option_name`):
+  supports idempotent upsert semantics during push.
+- `cpq_availability` composite key:
+  enforces unique per-rule per-country availability rows.
+- RBAC foreign keys:
+  preserve permission graph integrity.
+- domain/check constraints on brake/status fields:
+  preserve matrix behavior validity.
+
+## 6) Historical/transitional objects to track
+
+- `cpq_import_runs`: keep as diagnostics/transitional until confirmed obsolete.
+- legacy tables (`products`, `countries`, `availability`, `setup_options`, some `sku_rules` usage): candidates for deeper Run 2 cleanup.
+
+## 7) Operational classification summary
+
+- **Active operational runtime:** CPQ tables/views and RBAC/audit core.
+- **Active operational infrastructure:** feature-flag framework (excluding retired runtime-switch semantics).
+- **Compatibility/deprecation:** legacy matrix/setup tables and associated APIs.
+- **Historical/transitional:** import diagnostics and migration-era support structures.
+
+## 8) Generated inventory artifacts
 
 - Human-readable heuristic scan: `docs/generated/db-usage-report.md`
 - Machine-friendly scan output: `docs/database-runtime-inventory.json`
+- Supporting runtime inventory narrative: `docs/database-runtime-inventory.md`

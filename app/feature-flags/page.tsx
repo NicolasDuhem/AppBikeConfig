@@ -5,7 +5,7 @@ import FeatureFlagsClient from './page-client';
 export default async function FeatureFlagsPage() {
   const roles = await getCurrentUserRoles();
   if (!roles.includes('sys_admin')) {
-    redirect('/matrix');
+    redirect('/cpq-matrix');
   }
 
   return <FeatureFlagsClient />;
