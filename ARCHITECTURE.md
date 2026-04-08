@@ -1,82 +1,115 @@
 # AppBikeConfig Architecture
 
-## 1) Runtime architecture (CPQ-only)
+## 1) Current runtime posture (CPQ-only)
 
-As of **April 8, 2026**, AppBikeConfig runs a **single production runtime track**:
+As of **April 8, 2026**, the application operates on a **single CPQ runtime track**.
 
-- CPQ Product definition and generation (`/sku-definition`, `/cpq-feature`, `/api/sku-rules`, `/api/cpq/options`, `/api/cpq/generate`, `/api/cpq/push`)
-- CPQ Sales matrix operations (`/cpq-matrix`, `/api/cpq-matrix/*`)
-- CPQ setup control plane (`/setup`, `/api/product-setup`)
+Canonical surfaces:
+- Product definition: `/sku-definition` + `/api/sku-rules`.
+- Translation management: `/api/sku-rule-translations`.
+- Product setup: `/setup` + `/api/product-setup`.
+- Generation/push: `/cpq-feature`, `/api/cpq/options`, `/api/cpq/generate`, `/api/cpq/push`.
+- Sales matrix: `/cpq-matrix`, `/api/cpq-matrix/*`.
+- Admin control plane: users/roles/permissions/feature flags APIs.
 
-The previous dual-runtime model (`import_csv_cpq` switching between CPQ and legacy Matrix/Builder flows) is retired.
+Retired dual-track behavior (legacy Matrix/Builder branch switching) is no longer runtime truth.
 
-## 2) Routing posture
+## 2) Route topology
 
-### Active routes
-- `/` -> redirects to `/cpq-matrix`
-- `/cpq-matrix` -> canonical Sales - SKU vs Country surface
-- `/cpq-feature` -> canonical Product - Create SKU
-- `/sku-definition` -> canonical SKU rule management
-- `/setup` -> canonical setup configuration
+### 2.1 Primary routes
+- `/` -> redirect to `/cpq-matrix`.
+- `/cpq-matrix` -> Sales SKU-vs-country operations.
+- `/cpq-feature` -> generation UI.
+- `/sku-definition` -> canonical option/activation lifecycle.
+- `/setup` -> digit/dependency setup control plane.
+- `/feature-flags`, `/users` -> admin surfaces.
 
-### Transitional redirects kept
-- `/matrix` -> `/cpq-matrix`
-- `/bike-builder` -> `/cpq-feature`
-- `/order` -> `/cpq-matrix`
+### 2.2 Compatibility redirects (non-runtime branches)
+- `/matrix` -> `/cpq-matrix`.
+- `/bike-builder` -> `/cpq-feature`.
+- `/order` -> `/cpq-matrix`.
 
-These redirects remain for bookmark continuity only; they are not alternate runtime modes.
+These are continuity redirects only.
 
-## 3) Identity, RBAC, and audit
+## 3) Dataflow architecture (canonical)
 
-- Authentication is credentials-based (`next-auth`) backed by `app_users`.
-- Effective permissions are the merge of role baselines and user overrides.
-- Mutating operations write audit records via `lib/audit.ts`.
-- A small deprecation telemetry helper remains only for `/api/cpq/generate?run_id=` transitional diagnostics instrumentation.
+### 3.1 Authoring layer
+- Canonical options live in `cpq_import_rows`.
+- Locale overlays live in `cpq_import_row_translations`.
+- Setup rules live in `sku_digit_option_config` + `sku_generation_dependency_rules`.
 
-## 4) Canonical CPQ data model
+### 3.2 Generation layer
+- `/api/cpq/options` hydrates option catalog with locale-aware labels.
+- `/api/cpq/generate` POST generates in-memory combinations, validating required/single/match-code constraints.
+- `/api/cpq/generate` GET with `run_id` remains transitional diagnostics over `cpq_import_runs`.
 
-### 4.1 Canonical definition source
-- `cpq_import_rows` is the source of truth for option structure and active/inactive lifecycle.
-- `cpq_import_row_translations` stores locale overlays for display labels.
+### 3.3 Persistence layer
+- `/api/cpq/push` writes generated output into:
+  - `cpq_products`,
+  - `cpq_product_attributes`,
+  - `cpq_sku_rules`,
+  - `cpq_availability`.
+- Optional canonical backfill rows can be inserted into `cpq_import_rows` for unresolved attributes.
 
-### 4.2 Generation and push
-- `/api/cpq/options` hydrates selectable options from canonical rows + setup tables.
-- `/api/cpq/generate` (POST) builds combinations in memory.
-- `/api/cpq/push` persists generated output into:
-  - `cpq_products`
-  - `cpq_product_attributes`
-  - `cpq_sku_rules`
-  - `cpq_availability`
+### 3.4 Operations layer (Sales matrix)
+- `/api/cpq-matrix` reads CPQ rules + flattened attributes + availability + country metadata (+ optional assets).
+- `/api/cpq-matrix/save-all` and `/bulk-update` mutate rule data and availability.
+- `/api/cpq-matrix/check-bc-status` persists BC verification states.
+- `/api/cpq-matrix/picture` writes `cpq_product_assets` when feature flag is enabled.
 
-### 4.3 Sales matrix runtime
-- `/api/cpq-matrix` and companion mutation endpoints operate on:
-  - `cpq_sku_rules`
-  - `cpq_availability`
-  - `cpq_countries`
-  - `cpq_products_flat`
-  - `cpq_product_assets` (picture metadata path)
+## 4) Cross-cutting concerns
 
-## 5) Feature flags
+### 4.1 Auth and RBAC
+- Credentials auth via `next-auth` with `app_users`.
+- Effective permissions = role baselines + user overrides (`roles`, `role_permissions`, `user_roles`, `user_permissions`).
+- API authorization enforced by `requireApiRole`/`requireApiLogin`.
 
-- `cpq_bdam_picture_picker` is active and runtime-relevant.
-- `import_csv_cpq` is historical-only state and must not be used to branch runtime behavior.
+### 4.2 Auditing
+- Mutating CPQ/admin endpoints emit `audit_log` records through `lib/audit.ts`.
+- Feature-flag changes also persist to `feature_flag_audit`.
 
-## 6) Legacy object status after Run 2 cleanup
+### 4.3 Feature flags
+- Runtime-relevant flag: `cpq_bdam_picture_picker`.
+- `import_csv_cpq` remains historical metadata only and is not a runtime branch switch.
 
-### Removed from runtime code
+### 4.4 Locale model
+- Managed locales derive from `cpq_countries.locale_code`.
+- Runtime locale resolution is centralized in `lib/cpq-runtime-locale.ts` and used by CPQ option hydration.
+
+## 5) Physical schema vs runtime architecture
+
+### 5.1 Fresh schema snapshot truth
+`database schema.csv` and `database constraints.csv` describe a CPQ-first schema set (21 objects), including `sku_rules` but excluding old `products/countries/availability/setup_options`.
+
+### 5.2 Repo baseline gap
+`sql/schema.sql` still carries legacy table definitions from pre-cutover eras.
+
+Architectural implication:
+- Runtime architecture is already CPQ-only.
+- Baseline SQL cleanup is the remaining architecture/documentation debt.
+
+## 6) Historical context (explicitly non-runtime)
+
+Removed runtime APIs/services:
 - `/api/matrix*`
 - `/api/builder-push`
 - `/api/countries`
 - `/api/setup-options`
-- `lib/matrix-service.ts`
+- legacy matrix service module
 
-### Still present in DB schema (historical objects)
-- `products`, `countries`, `availability`, `setup_options`, `sku_rules`
+These should be treated as retired implementation history, not active architecture.
 
-These legacy tables are no longer read/written by active runtime code in this repository.
+## 7) Architecture-level cleanup recommendation
 
-## 7) Documentation governance
+Best next action is a **forward-baseline database cleanup run**:
+1. remove legacy table definitions from baseline SQL and seeds,
+2. keep `sku_rules` as staged-deprecation until external dependency watchlist is cleared,
+3. then execute explicit `sku_rules` drop migration.
 
-When behavior or persistence changes, update both:
-- `DATABASE.md`
-- `PROCESSDATA.md`
+## 8) Documentation governance
+
+When behavior or persistence changes, update together:
+- `ARCHITECTURE.md` (runtime structure)
+- `DATABASE.md` (schema truth + cleanup posture)
+- `PROCESSDATA.md` (process-level operational behavior)
+- `docs/database-cleanup-recommendations.md` (retirement sequencing)

@@ -1,6 +1,6 @@
 # Generated DB usage report
 
-Generated at: 2026-04-08T10:19:11.915Z
+Generated at: 2026-04-08T11:19:00.517Z
 
 > Heuristic scan of SQL table/view names found in app/lib/sql source files. Manual docs remain authoritative.
 
