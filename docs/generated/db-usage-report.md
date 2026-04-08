@@ -1,6 +1,6 @@
 # Generated DB usage report
 
-Generated at: 2026-04-08T11:19:00.517Z
+Generated at: 2026-04-08T12:28:29.163Z
 
 > Heuristic scan of SQL table/view names found in app/lib/sql source files. Manual docs remain authoritative.
 
@@ -8,7 +8,7 @@ Generated at: 2026-04-08T11:19:00.517Z
 |---|---|
 | `app_users` | `app/api/sku-rule-translations/route.ts`<br>`app/api/sku-rules/route.ts`<br>`app/api/users/route.ts`<br>`lib/auth.ts`<br>`lib/feature-flags.ts`<br>`sql/002_auth_rbac.sql` |
 | `audit_log` | `app/api/sku-rules/route.ts` |
-| `countries` | `sql/006_cpq_matrix_tables.sql`<br>`sql/seed.sql` |
+| `countries` | `sql/006_cpq_matrix_tables.sql` |
 | `cpq_availability` | `app/api/cpq-matrix/route.ts` |
 | `cpq_countries` | `app/api/cpq-matrix/bulk-update/route.ts`<br>`app/api/cpq-matrix/route.ts`<br>`app/api/cpq/push/route.ts`<br>`app/api/sku-rule-translations/route.ts`<br>`lib/cpq-matrix-service.ts`<br>`lib/cpq-runtime-locale.ts`<br>`sql/014_cpq_translation_management.sql` |
 | `cpq_import_row_translations` | `app/api/cpq/options/route.ts`<br>`app/api/sku-rule-translations/route.ts` |
@@ -21,7 +21,6 @@ Generated at: 2026-04-08T11:19:00.517Z
 | `cpq_sku_rules` | `app/api/cpq-matrix/bulk-update/route.ts`<br>`app/api/cpq-matrix/picture/route.ts`<br>`app/api/cpq-matrix/route.ts`<br>`app/api/cpq/push/route.ts`<br>`lib/cpq-matrix-service.ts` |
 | `feature_flags` | `app/api/feature-flags/route.ts`<br>`lib/feature-flags.ts` |
 | `permissions` | `app/api/permissions/route.ts`<br>`app/api/role-permissions/route.ts`<br>`app/api/users/route.ts`<br>`lib/auth.ts`<br>`sql/012_permissions_and_sku_generation_config.sql`<br>`sql/seed.sql` |
-| `products` | `sql/seed.sql` |
 | `role_permissions` | `app/api/role-permissions/route.ts`<br>`lib/auth.ts` |
 | `roles` | `app/api/role-permissions/route.ts`<br>`app/api/roles/route.ts`<br>`app/api/users/route.ts`<br>`lib/auth.ts`<br>`sql/002_auth_rbac.sql` |
 | `sku_digit_option_config` | `app/api/cpq/generate/route.ts`<br>`app/api/cpq/options/route.ts`<br>`app/api/product-setup/route.ts` |
