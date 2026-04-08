@@ -14,11 +14,11 @@ Missing (in baseline SQL, present in real DB):
 - `feature_flags`, `feature_flag_audit`
 - `roles`, `user_roles`
 
-## 2) Runtime write to table missing in DB truth
+## 2) Runtime write gap status
 
-`/api/role-permissions` PATCH writes `role_permission_baselines_audit`, but CSV schema has no such table.
+`/api/role-permissions` PATCH writes `role_permission_baselines_audit`, and this is now reconciled as a supported object in migrations and CSV truth.
 
-Implication: PATCH can fail in CSV-truth environments.
+Implication: CSV-truth environments now have an explicit schema path for this write.
 
 ## 3) Legacy table still present
 

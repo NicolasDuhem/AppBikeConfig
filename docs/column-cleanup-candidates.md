@@ -5,9 +5,9 @@ Date: April 8, 2026.
 ## High-confidence candidates
 
 ## 1) `cpq_import_rows`
-- `raw_option_name`
-- `raw_digit`
-- `raw_code_value`
+- `raw_option_name` (removed in migration `015_drop_cpq_import_rows_raw_columns.sql`)
+- `raw_digit` (removed in migration `015_drop_cpq_import_rows_raw_columns.sql`)
+- `raw_code_value` (removed in migration `015_drop_cpq_import_rows_raw_columns.sql`)
 
 Reason: no runtime SQL references in app/lib.
 

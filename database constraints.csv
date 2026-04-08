@@ -143,6 +143,10 @@
 "role_permissions_pkey","role_permissions","PRIMARY KEY","role_key","role_permissions","role_key",,,
 "role_permissions_pkey","role_permissions","PRIMARY KEY","permission_id","role_permissions","permission_id",,,
 "role_permissions_pkey","role_permissions","PRIMARY KEY","permission_id","role_permissions","role_key",,,
+"role_permission_baselines_audit_role_key_fkey","role_permission_baselines_audit","FOREIGN KEY","role_key","roles","role_key","NO ACTION","CASCADE",
+"role_permission_baselines_audit_changed_by_fkey","role_permission_baselines_audit","FOREIGN KEY","changed_by","app_users","id","NO ACTION","NO ACTION",
+"role_permission_baselines_audit_pkey","role_permission_baselines_audit","PRIMARY KEY","id","role_permission_baselines_audit","id",,,
+"role_permission_baselines_audit_role_key_not_null","role_permission_baselines_audit","CHECK",,,,,,"role_key IS NOT NULL"
 "2200_32783_1_not_null","roles","CHECK",,,,,,"id IS NOT NULL"
 "2200_32783_2_not_null","roles","CHECK",,,,,,"role_key IS NOT NULL"
 "2200_32783_3_not_null","roles","CHECK",,,,,,"role_name IS NOT NULL"

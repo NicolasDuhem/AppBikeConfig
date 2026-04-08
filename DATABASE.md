@@ -14,16 +14,16 @@ Date reconciled: **April 8, 2026**.
 
 ## 1) Real DB truth summary (CSV)
 
-- 21 tables
-- 210 columns
-- 210 exported constraint rows
-  - CHECK: 134
-  - PRIMARY KEY: 33
-  - FOREIGN KEY: 27
+- 22 tables
+- 218 columns
+- 214 exported constraint rows
+  - CHECK: 135
+  - PRIMARY KEY: 34
+  - FOREIGN KEY: 29
   - UNIQUE: 16
 
 Table families:
-- RBAC/Auth/Audit: `app_users`, `roles`, `user_roles`, `permissions`, `role_permissions`, `user_permissions`, `audit_log`
+- RBAC/Auth/Audit: `app_users`, `roles`, `user_roles`, `permissions`, `role_permissions`, `role_permission_baselines_audit`, `user_permissions`, `audit_log`
 - CPQ canonical/config: `cpq_import_rows`, `cpq_import_row_translations`, `sku_digit_option_config`, `sku_generation_dependency_rules`
 - CPQ persistence/matrix: `cpq_products`, `cpq_product_attributes`, `cpq_sku_rules`, `cpq_availability`, `cpq_countries`, `cpq_product_assets`
 - Feature/ops: `feature_flags`, `feature_flag_audit`, `cpq_import_runs`
@@ -61,7 +61,7 @@ Table families:
 
 ## 3.2 High-confidence cleanup candidates
 
-- `cpq_import_rows.raw_option_name`, `cpq_import_rows.raw_digit`, `cpq_import_rows.raw_code_value`
+- `cpq_import_rows.raw_option_name`, `cpq_import_rows.raw_digit`, `cpq_import_rows.raw_code_value` (**removed in this run via migration 015; rollback SQL included in-file**)
 - Many legacy payload columns in `cpq_products` (batch prune with dependency checks)
 - Majority of descriptive counters/payload in `cpq_import_runs` after diagnostics redesign
 
@@ -93,7 +93,7 @@ See `docs/constraint-cleanup-candidates.md`.
 Tables present in CSV but missing from baseline schema SQL:
 - `app_users`, `audit_log`, `cpq_import_rows`, `cpq_import_row_translations`, `cpq_import_runs`, `cpq_products`, `cpq_product_attributes`, `cpq_product_assets`, `feature_flags`, `feature_flag_audit`, `roles`, `user_roles`.
 
-Also, runtime writes `role_permission_baselines_audit` but this object is absent from CSV truth.
+`role_permission_baselines_audit` is now part of supported DB truth, aligned across runtime, migrations, and CSV inventories.
 
 Interpretation:
 - repo SQL cannot be considered current environment bootstrap truth,
@@ -116,10 +116,17 @@ Safe sequence:
 
 ---
 
-## 7) Immediate next migration step (concrete)
+## 7) Migration decision and deployment/rollback posture
 
-Next DB migration PR should perform exactly:
-1. Resolve `role_permission_baselines_audit` mismatch (create table in DB truth or remove runtime writes).
-2. Drop `cpq_import_rows.raw_option_name`, `raw_digit`, `raw_code_value`.
+Decision implemented in this run:
+1. **Keep/support** `role_permission_baselines_audit` as a real DB object (migration `014` + CSV truth update).
+2. Remove `cpq_import_rows.raw_option_name`, `raw_digit`, `raw_code_value` as legacy diagnostic residue (migration `015`).
 
-Rationale: maximum correctness gain with low operational risk.
+Deployment sequencing:
+1. Apply migration `014_role_permission_baselines_audit_csv_truth.sql`.
+2. Apply migration `015_drop_cpq_import_rows_raw_columns.sql`.
+3. Deploy runtime (no code-path change required for role-permissions endpoint).
+
+Rollback:
+- For migration `014`: table can remain in place safely (non-breaking additive object).
+- For migration `015`: run the additive `alter table ... add column` statements documented directly inside migration `015` to restore dropped columns.

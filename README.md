@@ -28,6 +28,8 @@ Run in this order:
 11. `sql/010_cpq_normalized_attributes_and_translations.sql`
 12. `sql/012_permissions_and_sku_generation_config.sql`
 13. `sql/013_cpq_import_rows_canonical_and_role_baseline.sql`
+14. `sql/014_role_permission_baselines_audit_csv_truth.sql` (explicit CSV-truth reconciliation for role-permissions PATCH audit writes)
+15. `sql/015_drop_cpq_import_rows_raw_columns.sql` (drops legacy raw import diagnostic columns with rollback notes in-file)
 
 ## Environment variables
 

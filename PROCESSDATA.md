@@ -28,7 +28,7 @@ Date reconciled: **April 8, 2026**.
 
 - Reads: `app_users`, `roles`, `user_roles`, `permissions`, `role_permissions`, `user_permissions`
 - Writes: user management + role-permission assignment flows
-- Critical note: `/api/role-permissions` PATCH writes `role_permission_baselines_audit`, which is not present in CSV DB truth.
+- `/api/role-permissions` PATCH writes `role_permission_baselines_audit` as an explicit supported audit sink for role baseline permission grants.
 
 ## 2.2 SKU definition and canonical source
 
@@ -78,7 +78,7 @@ Date reconciled: **April 8, 2026**.
 ## 4) Cleanup readiness from process perspective
 
 ## Safe now
-- Column cleanup in non-critical residue fields (`cpq_import_rows.raw_*`).
+- Column cleanup in non-critical residue fields (`cpq_import_rows.raw_*`) is now complete via explicit drop migration.
 - Documentation and baseline inventory alignment.
 
 ## Needs staged verification
@@ -86,13 +86,14 @@ Date reconciled: **April 8, 2026**.
 - `cpq_import_runs` deep cleanup.
 - Full `sku_rules` retirement.
 
-## Blocked until mismatch resolved
-- Reliable role-permissions PATCH process in CSV-truth environments due to missing `role_permission_baselines_audit` table.
+## Resolved in this run
+- Reliable role-permissions PATCH process in CSV-truth environments by explicitly supporting `role_permission_baselines_audit` in migration + CSV truth artifacts.
+- Canonical table cleanup by dropping `cpq_import_rows.raw_option_name`, `raw_digit`, `raw_code_value`.
 
 ---
 
 ## 5) Next operationally-safe action
 
-One migration PR with two changes:
-1. Resolve `role_permission_baselines_audit` mismatch.
-2. Remove `cpq_import_rows.raw_option_name`, `raw_digit`, `raw_code_value`.
+This run shipped a migration wave with two changes:
+1. `role_permission_baselines_audit` is now an explicit supported DB object in CSV truth and migrations.
+2. `cpq_import_rows.raw_option_name`, `raw_digit`, `raw_code_value` are dropped from supported schema with an additive rollback path documented in migration SQL.
