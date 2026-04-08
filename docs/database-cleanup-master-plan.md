@@ -1,6 +1,6 @@
 # Database cleanup master plan (CSV truth reconciliation)
 
-Date: **April 8, 2026** (cpq_import_runs + cpq_products staged cleanup wave).
+Date: **April 8, 2026** (dedicated cpq_products small-batch cleanup wave).
 Primary truth inputs: `database schema.csv` and `database constraints.csv`.
 
 ## 1) Reconciliation scope and method
@@ -92,9 +92,11 @@ Risk class: previously high; now mitigated by explicit schema support.
 - **Decision in this run:** do not drop columns yet; table is still operationally active for diagnostics lifecycle and should be retired only after run-creation ownership is redesigned.
 
 ### `cpq_products` (column-level verdict)
-- **Must keep (direct runtime write/read):** `id`, `import_run_id`, `cpq_ruleset`, `brake_reverse`, `brake_non_reverse`, `sku_code`, `created_by`, `created_at`.
+- **Must keep (direct runtime write/read):** `id`, `import_run_id`, `cpq_ruleset`, `sku_code`, `created_by`, `created_at`.
+- **Dropped in this wave (safe micro-batch):** `brake_reverse`, `brake_non_reverse` via migration `017_cpq_products_drop_brake_columns.sql`.
+  - Evidence: no `cpq_products_flat` dependency, no in-repo runtime reads, push write-path migrated to avoid inserting these columns.
 - **Compatibility-backed (used by `cpq_products_flat` fallback projection):** `product_assist`, `product_family`, `product_line`, `product_model`, `product_type`, `description`, `handlebar_type`, `speeds`, `mudguardsandrack`, `territory`, `mainframecolour`, `rearframecolour`, `frontcarrierblock`, `lighting`, `saddleheight`, `gearratio`, `saddle`, `tyre`, `brakes`, `pedals`, `saddlebag`, `suspension`, `biketype`, `toolkit`, `saddlelight`, `configcode`, `optionbox`, `framematerial`, `frameset`, `componentcolour`, `onbikeaccessories`, `handlebarstemcolour`, `handlebarpincolour`, `frontframecolour`, `frontforkcolour`.
-- **Removed this wave (no runtime/migration/view dependency):** `position29`, `position30` via migration `016_cpq_products_drop_position_columns.sql`.
+- **Removed in prior wave (no runtime/migration/view dependency):** `position29`, `position30` via migration `016_cpq_products_drop_position_columns.sql`.
 - **Decision:** continue with dedicated column-drop batches only after each candidate is proven absent from runtime SQL and compatibility projection requirements.
 
 ### Other low-risk metadata columns to review
@@ -179,7 +181,7 @@ Rollback:
 
 ## Stage B (column cleanup wave 1)
 
-1. Produce a dedicated `cpq_products` compatibility-fallback reduction batch (target 3-6 columns max) with explicit pre-drop evidence.
+1. Completed: dedicated `cpq_products` micro-batch dropping `brake_reverse` + `brake_non_reverse` (2 columns) with additive rollback posture.
 2. Add run-creation replacement design for `cpq_import_runs` before any destructive run-table cleanup.
 
 Rollback: re-add columns nullable with defaults; no data-critical semantics expected.
@@ -187,7 +189,7 @@ Rollback: re-add columns nullable with defaults; no data-critical semantics expe
 ## Stage C (column cleanup wave 2)
 
 1. Prune unused `cpq_import_runs` payload columns only after diagnostics lifecycle replacement is shipped.
-2. Continue `cpq_products` legacy payload reduction in small batches (3-6 columns per migration).
+2. Continue `cpq_products` legacy payload reduction in small batches (3-6 columns per migration) by reducing `cpq_products_flat` fallback dependency for each target subset first.
 
 Rollback: additive restore migration from backup snapshot.
 
@@ -208,7 +210,7 @@ Rollback: restore table from pre-drop backup or down migration.
 ## 10) Immediate next action (non-vague)
 
 **This run delivered one low-risk schema drop and one sequencing lock:**
-1. Removal of `cpq_products.position29` and `cpq_products.position30` with rollback SQL (`016`).
+1. Removal of `cpq_products.position29` and `cpq_products.position30` with rollback SQL (`016`), then removal of `cpq_products.brake_reverse` and `cpq_products.brake_non_reverse` with rollback SQL (`017`).
 2. Explicit decision to keep `cpq_import_runs` intact until diagnostics ownership replacement.
 
-Recommended next cleanup target: **dedicated `cpq_products` column-drop batch**, then `cpq_import_runs` retirement prep, then `sku_rules` replacement/removal prep.
+Recommended next cleanup target: **another dedicated `cpq_products` fallback-reduction + column-drop batch**, then `cpq_import_runs` retirement prep, then `sku_rules` replacement/removal prep.

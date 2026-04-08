@@ -8,7 +8,7 @@ Operational database truth for AppBikeConfig, reconciled against:
 - runtime SQL in `app/**` + `lib/**`
 - repository SQL in `sql/**` (explicitly non-authoritative when conflicting)
 
-Date reconciled: **April 8, 2026** (cpq_import_runs + cpq_products cleanup wave).
+Date reconciled: **April 8, 2026** (dedicated cpq_products small-batch cleanup wave).
 
 ---
 
@@ -62,7 +62,8 @@ Table families:
 ## 3.2 High-confidence cleanup candidates
 
 - `cpq_import_rows.raw_option_name`, `cpq_import_rows.raw_digit`, `cpq_import_rows.raw_code_value` (**removed in prior wave via migration 015; rollback SQL included in-file**)
-- `cpq_products.position29`, `cpq_products.position30` (**removed in this run via migration 016; rollback SQL included in-file**)
+- `cpq_products.brake_reverse`, `cpq_products.brake_non_reverse` (**removed in this run via migration 017; rollback SQL included in-file**)
+- `cpq_products.position29`, `cpq_products.position30` (**removed in prior run via migration 016; rollback SQL included in-file**)
 - Remaining denormalized payload columns in `cpq_products` should be dropped only in staged micro-batches with explicit dependency re-check.
 - `cpq_import_runs` row counters/operational fields remain high-potential cleanup candidates, but should not be dropped until run creation/ownership semantics are fully replaced.
 
@@ -121,11 +122,11 @@ Safe sequence:
 
 Decision implemented in this run:
 1. **Keep** `cpq_import_runs` as a transitional diagnostics object; no destructive drop executed because `/api/cpq/generate` GET still reads generation metadata from this table.
-2. Remove `cpq_products.position29` and `cpq_products.position30` as dead placeholder columns (migration `016`).
+2. Remove `cpq_products.brake_reverse` and `cpq_products.brake_non_reverse` as compatibility residue not required by runtime or `cpq_products_flat` (migration `017`).
 
 Deployment sequencing:
-1. Apply migration `016_cpq_products_drop_position_columns.sql`.
-2. Deploy runtime (no code-path change required; columns are runtime-unused).
+1. Apply migration `017_cpq_products_drop_brake_columns.sql`.
+2. Deploy runtime change that removes `brake_*` inserts from `/api/cpq/push`.
 
 Rollback:
-- For migration `016`: run the additive `alter table ... add column` statements documented directly inside migration `016` to restore dropped columns.
+- For migration `017`: run the additive `alter table ... add column` statements documented directly inside migration `017` to restore dropped columns.

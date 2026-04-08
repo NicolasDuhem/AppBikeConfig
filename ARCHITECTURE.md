@@ -62,11 +62,12 @@ Keep/support `role_permission_baselines_audit` to avoid runtime write failures i
 Prune only evidence-backed dead columns in very small batches with rollback posture.
 Completed examples:
 - `cpq_import_rows.raw_*` (prior wave),
-- `cpq_products.position29`, `cpq_products.position30` (this wave).
+- `cpq_products.position29`, `cpq_products.position30` (prior wave),
+- `cpq_products.brake_reverse`, `cpq_products.brake_non_reverse` (this wave).
 
 ## Priority 3 (staged modernization)
 - retain `cpq_import_runs` for current generation diagnostics lifecycle, then prune payload/retire in a dedicated run,
-- reduce denormalized `cpq_products` columns,
+- reduce denormalized `cpq_products` columns by shrinking `cpq_products_flat` fallback dependency in small reversible batches,
 - retire `sku_rules` object family.
 
 ---
