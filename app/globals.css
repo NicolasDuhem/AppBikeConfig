@@ -146,18 +146,31 @@ th { position:sticky; top:0; background:#f8faff; z-index:1; }
 .cpqFeatureHeaderRow { display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; align-items:center; }
 .cpqFeatureFilePicker { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
 .cpqFeatureToolbar { margin-bottom:6px; }
-.cpqFeatureHeaderActions { display:flex; gap:6px; align-items:center; }
+.cpqFeaturePage { min-width:0; display:grid; gap:6px; min-height:0; }
+.cpqMetaCard { min-width:0; }
+.cpqMetaGrid { grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); }
+.cpqFeatureHeaderActions { display:flex; gap:6px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
 .cpqFeatureSectionActions { margin-top:8px; justify-content:flex-end; }
 .columnManagerCard { margin-bottom:8px; }
 .columnToggleGrid { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:6px 10px; }
 .featureFilterGrid { grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:10px; }
 .cpqFeatureTableWrap { flex:1; }
 .cpqFeatureTable { min-width:1100px; }
+.digitFilterTitle { max-width:100%; line-height:1.25; }
+.digitFiltersViewport { border:1px solid var(--line); border-radius:12px; background:#f8faff; padding:10px; max-height:420px; overflow-y:auto; }
+.digitFilterGrid { display:grid; grid-template-columns:repeat(auto-fit, minmax(250px, 1fr)); gap:10px; align-items:start; min-width:0; }
+.digitFilterCard { min-width:0; border:1px solid var(--line); border-radius:12px; padding:10px; background:#fff; display:grid; gap:8px; }
+.digitFilterCardHeader h4 { margin:0; font-size:13px; line-height:1.25; display:-webkit-box; -webkit-line-clamp:2; line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.digitFilterCardHeader .subtle { font-size:11px; }
+.digitChoiceList { min-height:140px; max-height:180px; overflow:auto; }
+.digitChoiceList .choiceRow { align-items:flex-start; }
 .choicePopover summary { list-style:none; cursor:pointer; border:1px solid var(--line); border-radius:10px; padding:6px 10px; background:#fff; color:#34405d; text-transform:none; font-weight:500; }
 .choicePopover[open] summary { border-bottom-left-radius:0; border-bottom-right-radius:0; }
 .choicePopover .choiceList { border-top-left-radius:0; border-top-right-radius:0; border-top:none; max-height:165px; }
 .tableSelectControls { display:grid; gap:6px; min-width:130px; }
 .tableSelectControls button { padding:4px 8px; font-size:12px; }
+
+.adminContent > * { min-width:0; }
 
 @media (max-width: 1100px) {
   .addRuleGrid { grid-template-columns:repeat(2,minmax(200px,1fr)); }

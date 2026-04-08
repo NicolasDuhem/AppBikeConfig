@@ -148,9 +148,13 @@ export default function CpqFeatureClient() {
     setStatus(`Push complete. Pushed: ${payload.pushed || 0}. Skipped duplicate SKU: ${payload.skippedDuplicateSkuCount || 0}. Failed rows: ${Array.isArray(payload.failedRows) ? payload.failedRows.length : 0}.`);
   }
 
-  function toggleDigitChoice(digitPosition: number, codeValue: string) {
+  function setDigitChoice(digitPosition: number, codeValue: string, selectionMode: 'single' | 'multi') {
     setSelectedCodesByDigit((current) => {
       const selectedCodes = new Set(current[digitPosition] || []);
+      if (selectionMode === 'single') {
+        if (selectedCodes.has(codeValue)) return { ...current, [digitPosition]: [] };
+        return { ...current, [digitPosition]: [codeValue] };
+      }
       if (selectedCodes.has(codeValue)) selectedCodes.delete(codeValue);
       else selectedCodes.add(codeValue);
       return { ...current, [digitPosition]: Array.from(selectedCodes) };
@@ -170,8 +174,9 @@ export default function CpqFeatureClient() {
 
   return (
     <AdminPageShell title="Product - Create SKU" subtitle="Select active DB choices, generate combinations, then push selected rows to Sales - SKU vs Country.">
-      <div className="card compactCard compactSection">
-        <div className="matrixFilterGrid featureFilterGrid">
+      <div className="cpqFeaturePage">
+      <div className="card compactCard compactSection cpqMetaCard">
+        <div className="matrixFilterGrid featureFilterGrid cpqMetaGrid">
           <label className="filterLabel">CPQ ruleset
             <input value={form.cpqRuleset} onChange={(e) => setForm((curr) => ({ ...curr, cpqRuleset: e.target.value }))} placeholder="e.g. C-Line-2026" />
           </label>
@@ -198,7 +203,7 @@ export default function CpqFeatureClient() {
 
       <div className="card compactCard compactSection">
         <div className="filtersHeader">
-          <strong>Digit-based options (1-30)</strong>
+          <strong className="digitFilterTitle">Digit-based options (1-30)</strong>
           <div className="cpqFeatureHeaderActions">
             <button onClick={() => setShowDigitFilters((current) => !current)}>{showDigitFilters ? 'Collapse' : 'Expand'}</button>
             <button onClick={() => setSelectedCodesByDigit({})}>Reset option selections</button>
@@ -206,33 +211,31 @@ export default function CpqFeatureClient() {
         </div>
         {showDigitFilters ? (
           loadingOptions ? <div className="subtle">Loading options...</div> : (
-            <div className="matrixFilterGrid featureFilterGrid">
+            <div className="digitFiltersViewport">
+            <div className="digitFilterGrid">
               {digitOptions.map((group) => (
-                <label className="filterLabel" key={group.digitPosition}>Digit {group.digitPosition}: {group.optionName} {group.isRequired ? '(required)' : '(optional)'}
-                  {group.selectionMode === 'single' ? (
-                    <select value={(selectedCodesByDigit[group.digitPosition] || [''])[0] || ''} onChange={(e) => setSelectedCodesByDigit((curr) => ({ ...curr, [group.digitPosition]: e.target.value ? [e.target.value] : [] }))}>
-                      {!group.isRequired ? <option value="">-- none --</option> : null}
-                      {group.choices.map((choice) => <option key={`${group.digitPosition}-${choice.codeValue}`} value={choice.codeValue}>{choice.codeValue} · {choice.choiceValue}</option>)}
-                    </select>
-                  ) : (
-                    <details className="choicePopover">
-                      <summary>{(selectedCodesByDigit[group.digitPosition] || []).length ? `${(selectedCodesByDigit[group.digitPosition] || []).length} selected` : 'Choose options'}</summary>
-                      <div className="choiceList">
-                        {group.choices.map((choice) => (
-                          <label key={`${group.digitPosition}-${choice.codeValue}`} className="choiceRow">
-                            <input
-                              type="checkbox"
-                              checked={(selectedCodesByDigit[group.digitPosition] || []).includes(choice.codeValue)}
-                              onChange={() => toggleDigitChoice(group.digitPosition, choice.codeValue)}
-                            />
-                            {choice.codeValue} · {choice.choiceValue}
-                          </label>
-                        ))}
-                      </div>
-                    </details>
-                  )}
-                </label>
+                <section className="digitFilterCard" key={group.digitPosition}>
+                  <header className="digitFilterCardHeader">
+                    <h4>
+                      <span>Digit {group.digitPosition}:</span> <span>{group.optionName}</span>
+                    </h4>
+                    <div className="subtle">{group.isRequired ? 'Required' : 'Optional'} · {group.selectionMode === 'single' ? 'Single select' : 'Multi select'}</div>
+                  </header>
+                  <div className="choiceList digitChoiceList">
+                    {group.choices.map((choice) => (
+                      <label key={`${group.digitPosition}-${choice.codeValue}`} className="choiceRow">
+                        <input
+                          type="checkbox"
+                          checked={(selectedCodesByDigit[group.digitPosition] || []).includes(choice.codeValue)}
+                          onChange={() => setDigitChoice(group.digitPosition, choice.codeValue, group.selectionMode)}
+                        />
+                        {choice.codeValue} · {choice.choiceValue}
+                      </label>
+                    ))}
+                  </div>
+                </section>
               ))}
+            </div>
             </div>
           )
         ) : <div className="subtle">Collapsed by default for a cleaner workspace. Expand when you need digit-level filters.</div>}
@@ -325,6 +328,7 @@ export default function CpqFeatureClient() {
           ))}
         </tbody>
       </table></div></div>
+      </div>
     </AdminPageShell>
   );
 }
