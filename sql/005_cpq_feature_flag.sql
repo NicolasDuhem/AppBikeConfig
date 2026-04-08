@@ -105,8 +105,6 @@ create table if not exists cpq_products (
   handlebarpincolour text,
   frontframecolour text,
   frontforkcolour text,
-  position29 text,
-  position30 text,
   created_by bigint references app_users(id),
   created_at timestamptz not null default now()
 );

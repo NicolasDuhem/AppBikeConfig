@@ -8,7 +8,7 @@ Operational database truth for AppBikeConfig, reconciled against:
 - runtime SQL in `app/**` + `lib/**`
 - repository SQL in `sql/**` (explicitly non-authoritative when conflicting)
 
-Date reconciled: **April 8, 2026**.
+Date reconciled: **April 8, 2026** (cpq_import_runs + cpq_products cleanup wave).
 
 ---
 
@@ -44,7 +44,7 @@ Table families:
 | `cpq_products`, `cpq_product_attributes` | Active + partially legacy payload | Push + normalized link | Keep table, prune columns |
 | `cpq_sku_rules`, `cpq_availability`, `cpq_countries` | Active | Matrix persistence | Keep |
 | `cpq_product_assets` | Active (feature-flag path) | Optional picture flow | Keep |
-| `cpq_import_runs` | Transitional | Generation diagnostics | Deprecate later |
+| `cpq_import_runs` | Transitional diagnostics | `/api/cpq/generate` GET lifecycle state + metadata read | Keep for now; narrow retained scope and stage retirement |
 | `sku_rules` | Cleanup candidate | No runtime API usage | Replace then drop |
 
 ---
@@ -61,9 +61,10 @@ Table families:
 
 ## 3.2 High-confidence cleanup candidates
 
-- `cpq_import_rows.raw_option_name`, `cpq_import_rows.raw_digit`, `cpq_import_rows.raw_code_value` (**removed in this run via migration 015; rollback SQL included in-file**)
-- Many legacy payload columns in `cpq_products` (batch prune with dependency checks)
-- Majority of descriptive counters/payload in `cpq_import_runs` after diagnostics redesign
+- `cpq_import_rows.raw_option_name`, `cpq_import_rows.raw_digit`, `cpq_import_rows.raw_code_value` (**removed in prior wave via migration 015; rollback SQL included in-file**)
+- `cpq_products.position29`, `cpq_products.position30` (**removed in this run via migration 016; rollback SQL included in-file**)
+- Remaining denormalized payload columns in `cpq_products` should be dropped only in staged micro-batches with explicit dependency re-check.
+- `cpq_import_runs` row counters/operational fields remain high-potential cleanup candidates, but should not be dropped until run creation/ownership semantics are fully replaced.
 
 See full staged list in `docs/column-cleanup-candidates.md`.
 
@@ -119,14 +120,12 @@ Safe sequence:
 ## 7) Migration decision and deployment/rollback posture
 
 Decision implemented in this run:
-1. **Keep/support** `role_permission_baselines_audit` as a real DB object (migration `014` + CSV truth update).
-2. Remove `cpq_import_rows.raw_option_name`, `raw_digit`, `raw_code_value` as legacy diagnostic residue (migration `015`).
+1. **Keep** `cpq_import_runs` as a transitional diagnostics object; no destructive drop executed because `/api/cpq/generate` GET still reads generation metadata from this table.
+2. Remove `cpq_products.position29` and `cpq_products.position30` as dead placeholder columns (migration `016`).
 
 Deployment sequencing:
-1. Apply migration `014_role_permission_baselines_audit_csv_truth.sql`.
-2. Apply migration `015_drop_cpq_import_rows_raw_columns.sql`.
-3. Deploy runtime (no code-path change required for role-permissions endpoint).
+1. Apply migration `016_cpq_products_drop_position_columns.sql`.
+2. Deploy runtime (no code-path change required; columns are runtime-unused).
 
 Rollback:
-- For migration `014`: table can remain in place safely (non-breaking additive object).
-- For migration `015`: run the additive `alter table ... add column` statements documented directly inside migration `015` to restore dropped columns.
+- For migration `016`: run the additive `alter table ... add column` statements documented directly inside migration `016` to restore dropped columns.

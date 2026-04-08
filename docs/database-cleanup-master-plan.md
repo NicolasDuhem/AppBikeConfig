@@ -1,6 +1,6 @@
 # Database cleanup master plan (CSV truth reconciliation)
 
-Date: **April 8, 2026**.
+Date: **April 8, 2026** (cpq_import_runs + cpq_products staged cleanup wave).
 Primary truth inputs: `database schema.csv` and `database constraints.csv`.
 
 ## 1) Reconciliation scope and method
@@ -74,7 +74,7 @@ Risk class: previously high; now mitigated by explicit schema support.
 | `cpq_products`, `cpq_product_attributes` | Active / partially normalized | Active write path; many legacy columns still present | Medium | Keep table, clean columns |
 | `cpq_sku_rules`, `cpq_availability`, `cpq_countries` | Active | Active matrix runtime | Very high | Keep |
 | `cpq_product_assets` | Active (feature-flag path) | Active write when enabled | Medium | Keep |
-| `cpq_import_runs` | Transitional | Transitional diagnostics | Low-medium | Deprecate after run diagnostics replacement |
+| `cpq_import_runs` | Transitional diagnostics | `/api/cpq/generate` GET run metadata + lifecycle updates | Medium | Keep now, stage retirement with explicit replacement |
 | `sku_rules` | Cleanup candidate (legacy) | Not used by runtime; seed/migration bridge only | Medium-high external dependency risk | Replace/remove in staged migration |
 
 ## 5) Column-level reconciliation (high value cleanup list)
@@ -85,14 +85,17 @@ Risk class: previously high; now mitigated by explicit schema support.
 - `raw_option_name`, `raw_digit`, `raw_code_value` (removed in migration `sql/015_drop_cpq_import_rows_raw_columns.sql`; rollback is additive restore SQL in-file)
 - Rationale: no runtime reads/writes in API logic; likely import-diagnostics residue.
 
-### `cpq_import_runs`
-- Most payload/detail columns are runtime-unused (`character_17`, `electric_type`, `selected_line`, `special_edition_name`, row counters, etc.).
-- Rationale: runtime only uses limited run lifecycle metadata for diagnostics endpoint behavior.
+### `cpq_import_runs` (column-level verdict)
+- **Runtime read evidence:** `/api/cpq/generate` GET fetches `select *` and uses `file_name`, `selected_line`, `electric_type`, `is_special`, `special_edition_name`, `character_17`.
+- **Runtime write evidence:** `/api/cpq/generate` GET writes `current_phase`, `status`, `error_message`, `error_stack`, `completed_at`, `failed_at`.
+- **No in-repo runtime evidence:** `rows_read`, `rows_imported`, `rows_skipped`, `rows_deactivated`, `rows_inserted`, `uploaded_by`, `uploaded_at`, `started_at`, `is_dry_run`.
+- **Decision in this run:** do not drop columns yet; table is still operationally active for diagnostics lifecycle and should be retired only after run-creation ownership is redesigned.
 
-### `cpq_products`
-- Large legacy payload appears unused by runtime (`biketype`, `brakes`, `componentcolour`, `configcode`, many descriptive columns).
-- Rationale: runtime writes normalized artifacts and matrix uses `cpq_sku_rules`/`cpq_product_attributes` projection.
-- Note: keep columns involved in current insert/select paths until migration proves no hidden dependencies.
+### `cpq_products` (column-level verdict)
+- **Must keep (direct runtime write/read):** `id`, `import_run_id`, `cpq_ruleset`, `brake_reverse`, `brake_non_reverse`, `sku_code`, `created_by`, `created_at`.
+- **Compatibility-backed (used by `cpq_products_flat` fallback projection):** `product_assist`, `product_family`, `product_line`, `product_model`, `product_type`, `description`, `handlebar_type`, `speeds`, `mudguardsandrack`, `territory`, `mainframecolour`, `rearframecolour`, `frontcarrierblock`, `lighting`, `saddleheight`, `gearratio`, `saddle`, `tyre`, `brakes`, `pedals`, `saddlebag`, `suspension`, `biketype`, `toolkit`, `saddlelight`, `configcode`, `optionbox`, `framematerial`, `frameset`, `componentcolour`, `onbikeaccessories`, `handlebarstemcolour`, `handlebarpincolour`, `frontframecolour`, `frontforkcolour`.
+- **Removed this wave (no runtime/migration/view dependency):** `position29`, `position30` via migration `016_cpq_products_drop_position_columns.sql`.
+- **Decision:** continue with dedicated column-drop batches only after each candidate is proven absent from runtime SQL and compatibility projection requirements.
 
 ### Other low-risk metadata columns to review
 - `cpq_countries.created_at`, `cpq_countries.updated_at`
@@ -163,25 +166,28 @@ Reasoning:
 
 ## 8) Staged cleanup sequence with rollback
 
-## Stage A (next migration, concrete)
+## Stage A (already completed)
 
-1. **Completed in this run:** keep/support `role_permission_baselines_audit` as a real DB object.
-2. **Completed in this run:** drop `cpq_import_rows.raw_*` columns with rollback SQL posture.
+1. keep/support `role_permission_baselines_audit` as a real DB object.
+2. drop `cpq_import_rows.raw_*` columns with rollback SQL posture.
+3. drop `cpq_products.position29` and `cpq_products.position30` as dead placeholders.
 
 Rollback:
 - role baseline audit table is additive/non-breaking and can remain on rollback.
 - raw column rollback uses additive `alter table ... add column` statements documented in `sql/015_drop_cpq_import_rows_raw_columns.sql`.
+- `cpq_products` placeholder rollback uses additive `alter table ... add column` statements documented in `sql/016_cpq_products_drop_position_columns.sql`.
 
 ## Stage B (column cleanup wave 1)
 
-1. Continue post-`cpq_import_rows.raw_*` cleanup on lower-risk metadata timestamps listed above where safe.
+1. Produce a dedicated `cpq_products` compatibility-fallback reduction batch (target 3-6 columns max) with explicit pre-drop evidence.
+2. Add run-creation replacement design for `cpq_import_runs` before any destructive run-table cleanup.
 
 Rollback: re-add columns nullable with defaults; no data-critical semantics expected.
 
 ## Stage C (column cleanup wave 2)
 
-1. Prune unused `cpq_import_runs` payload columns.
-2. Start `cpq_products` legacy payload reduction in small batches (5-10 columns per migration).
+1. Prune unused `cpq_import_runs` payload columns only after diagnostics lifecycle replacement is shipped.
+2. Continue `cpq_products` legacy payload reduction in small batches (3-6 columns per migration).
 
 Rollback: additive restore migration from backup snapshot.
 
@@ -201,8 +207,8 @@ Rollback: restore table from pre-drop backup or down migration.
 
 ## 10) Immediate next action (non-vague)
 
-**This run delivered the previously identified migration pair:**
-1. `role_permission_baselines_audit` runtime/DB-truth reconciliation (kept/supported).
-2. Removal of `cpq_import_rows.raw_option_name`, `cpq_import_rows.raw_digit`, `cpq_import_rows.raw_code_value` with rollback SQL.
+**This run delivered one low-risk schema drop and one sequencing lock:**
+1. Removal of `cpq_products.position29` and `cpq_products.position30` with rollback SQL (`016`).
+2. Explicit decision to keep `cpq_import_runs` intact until diagnostics ownership replacement.
 
-Recommended next cleanup target: `cpq_import_runs` / `cpq_products` cleanup wave (small-batch, reversible).
+Recommended next cleanup target: **dedicated `cpq_products` column-drop batch**, then `cpq_import_runs` retirement prep, then `sku_rules` replacement/removal prep.
