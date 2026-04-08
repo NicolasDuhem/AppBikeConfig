@@ -2,7 +2,7 @@
 
 ## 1) Runtime architecture (CPQ-only)
 
-As of **April 8, 2026**, runtime architecture is CPQ-first:
+As of **April 8, 2026**, runtime architecture is CPQ-first (with staged cleanup wave applied):
 - Canonical authoring: `cpq_import_rows`
 - Translation overlay: `cpq_import_row_translations`
 - Config control plane: `sku_digit_option_config`, `sku_generation_dependency_rules`
@@ -59,10 +59,13 @@ Implication:
 Keep/support `role_permission_baselines_audit` to avoid runtime write failures in CSV-truth environments.
 
 ## Priority 2 (safe reduction)
-Prune obvious unused residue columns in canonical tables (`cpq_import_rows.raw_*`) with rollback posture.
+Prune only evidence-backed dead columns in very small batches with rollback posture.
+Completed examples:
+- `cpq_import_rows.raw_*` (prior wave),
+- `cpq_products.position29`, `cpq_products.position30` (this wave).
 
 ## Priority 3 (staged modernization)
-- prune `cpq_import_runs` payload,
+- retain `cpq_import_runs` for current generation diagnostics lifecycle, then prune payload/retire in a dedicated run,
 - reduce denormalized `cpq_products` columns,
 - retire `sku_rules` object family.
 

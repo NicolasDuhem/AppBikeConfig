@@ -4,7 +4,7 @@
 
 Detailed operational process/data map for AppBikeConfig CPQ runtime, reconciled with CSV database truth.
 
-Date reconciled: **April 8, 2026**.
+Date reconciled: **April 8, 2026** (cpq_import_runs + cpq_products cleanup wave).
 
 ---
 
@@ -56,8 +56,10 @@ Date reconciled: **April 8, 2026**.
 
 - Endpoint: `/api/cpq/generate`
 - Active flow reads canonical/config tables.
-- Transitional diagnostics involve `cpq_import_runs`.
-- `cpq_import_runs` has high column-level cleanup potential once diagnostics are redesigned.
+- Transitional diagnostics still depend on `cpq_import_runs`:
+  - GET reads full run row (`select *`) and consumes metadata fields (`file_name`, `selected_line`, `electric_type`, `is_special`, `special_edition_name`, `character_17`).
+  - GET updates lifecycle fields (`current_phase`, `status`, `error_message`, `error_stack`, `completed_at`, `failed_at`).
+- No runtime insert path currently exists in-repo for `cpq_import_runs`; treat this as transitional and keep until run-creation replacement is explicit.
 
 ## 2.6 Push + matrix operations
 
@@ -78,22 +80,23 @@ Date reconciled: **April 8, 2026**.
 ## 4) Cleanup readiness from process perspective
 
 ## Safe now
-- Column cleanup in non-critical residue fields (`cpq_import_rows.raw_*`) is now complete via explicit drop migration.
+- Column cleanup in non-critical residue fields (`cpq_import_rows.raw_*`) is complete via explicit drop migration from prior wave.
+- `cpq_products.position29` + `cpq_products.position30` were removed in this wave; no runtime read/write path depends on these columns.
 - Documentation and baseline inventory alignment.
 
 ## Needs staged verification
-- `cpq_products` large denormalized payload column pruning.
-- `cpq_import_runs` deep cleanup.
+- `cpq_products` remaining denormalized payload column pruning (small dependency-checked batches).
+- `cpq_import_runs` deep cleanup, especially row counters and upload ownership fields that are not used by active runtime SQL.
 - Full `sku_rules` retirement.
 
 ## Resolved in this run
-- Reliable role-permissions PATCH process in CSV-truth environments by explicitly supporting `role_permission_baselines_audit` in migration + CSV truth artifacts.
-- Canonical table cleanup by dropping `cpq_import_rows.raw_option_name`, `raw_digit`, `raw_code_value`.
+- Staged `cpq_products` cleanup by dropping dead `position29` + `position30` placeholders with additive rollback posture.
+- `cpq_import_runs` status clarified as transitional diagnostics table that is still read/write-touched by generation lifecycle handling.
 
 ---
 
 ## 5) Next operationally-safe action
 
-This run shipped a migration wave with two changes:
-1. `role_permission_baselines_audit` is now an explicit supported DB object in CSV truth and migrations.
-2. `cpq_import_rows.raw_option_name`, `raw_digit`, `raw_code_value` are dropped from supported schema with an additive rollback path documented in migration SQL.
+This run shipped one low-risk schema change and one sequencing decision:
+1. Drop `cpq_products.position29` + `position30` in migration `016_cpq_products_drop_position_columns.sql`.
+2. Keep `cpq_import_runs` intact for now, and target a dedicated retirement run after run-creation and diagnostics ownership are redesigned.

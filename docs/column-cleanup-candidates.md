@@ -1,6 +1,6 @@
 # Column cleanup candidates (CSV truth + runtime reconciliation)
 
-Date: April 8, 2026.
+Date: April 8, 2026 (cpq_import_runs + cpq_products wave).
 
 ## High-confidence candidates
 
@@ -12,18 +12,26 @@ Date: April 8, 2026.
 Reason: no runtime SQL references in app/lib.
 
 ## 2) `cpq_import_runs` (wave-based pruning)
-Examples of runtime-unused payload fields:
-- `character_17`, `electric_type`, `selected_line`, `special_edition_name`
-- `rows_read`, `rows_imported`, `rows_skipped`, `rows_deactivated`, `rows_inserted`
-
-Reason: runtime uses only transitional diagnostics flow.
+- **Actively used now (direct runtime read/write evidence):**
+  - reads: `file_name`, `selected_line`, `electric_type`, `is_special`, `special_edition_name`, `character_17`
+  - writes: `current_phase`, `status`, `error_message`, `error_stack`, `completed_at`, `failed_at`
+- **Likely removable after diagnostics redesign (no in-repo runtime references):**
+  - `rows_read`, `rows_imported`, `rows_skipped`, `rows_deactivated`, `rows_inserted`
+  - `uploaded_by`, `uploaded_at`, `started_at`, `is_dry_run`
+- **Decision:** keep table and all columns for now; remove only in a dedicated retirement/pre-retirement run.
 
 ## 3) `cpq_products` (large denormalized legacy payload)
-Examples:
-- `biketype`, `brakes`, `componentcolour`, `configcode`, `framematerial`, `frameset`
-- additional descriptive columns not referenced by runtime SQL
-
-Reason: runtime behavior centers on normalized relation (`cpq_product_attributes`) + CPQ matrix rows.
+- **Must keep (direct runtime insert):**
+  - `id`, `import_run_id`, `cpq_ruleset`, `brake_reverse`, `brake_non_reverse`, `sku_code`, `created_by`, `created_at`
+- **Compatibility fallback columns (still used by `cpq_products_flat` coalesce projection):**
+  - `product_assist`, `product_family`, `product_line`, `product_model`, `product_type`, `description`
+  - `handlebar_type`, `speeds`, `mudguardsandrack`, `territory`, `mainframecolour`, `rearframecolour`, `frontcarrierblock`, `lighting`, `saddleheight`, `gearratio`
+  - `saddle`, `tyre`, `brakes`, `pedals`, `saddlebag`, `suspension`, `biketype`, `toolkit`, `saddlelight`
+  - `configcode`, `optionbox`, `framematerial`, `frameset`, `componentcolour`, `onbikeaccessories`
+  - `handlebarstemcolour`, `handlebarpincolour`, `frontframecolour`, `frontforkcolour`
+- **Removed in this wave (high-confidence dead placeholders):**
+  - `position29`, `position30` (migration `016_cpq_products_drop_position_columns.sql`)
+- **Next staged candidates:** only after reducing `cpq_products_flat` fallback dependency, then drop in small batches.
 
 ## Medium-confidence candidates (validate first)
 
