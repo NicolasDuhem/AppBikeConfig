@@ -4,7 +4,7 @@
 
 Detailed operational process/data map for AppBikeConfig CPQ runtime, reconciled with CSV database truth.
 
-Date reconciled: **April 8, 2026** (cpq_import_runs + cpq_products cleanup wave).
+Date reconciled: **April 8, 2026** (dedicated cpq_products small-batch cleanup wave).
 
 ---
 
@@ -64,6 +64,7 @@ Date reconciled: **April 8, 2026** (cpq_import_runs + cpq_products cleanup wave)
 ## 2.6 Push + matrix operations
 
 - `/api/cpq/push` writes `cpq_products`, `cpq_product_attributes`, `cpq_sku_rules`, `cpq_availability`.
+- In this wave, push row creation no longer writes `cpq_products.brake_reverse` / `cpq_products.brake_non_reverse`; brake semantics remain represented via `cpq_product_attributes` (`BrakeReverse` / `BrakeNonReverse`) and `cpq_sku_rules.brake_type`.
 - `/api/cpq-matrix*` reads/writes matrix tables + availability + countries; optional assets flow reads/writes `cpq_product_assets`.
 - Matrix integrity depends on FK + domain checks in CPQ tables.
 
@@ -81,7 +82,8 @@ Date reconciled: **April 8, 2026** (cpq_import_runs + cpq_products cleanup wave)
 
 ## Safe now
 - Column cleanup in non-critical residue fields (`cpq_import_rows.raw_*`) is complete via explicit drop migration from prior wave.
-- `cpq_products.position29` + `cpq_products.position30` were removed in this wave; no runtime read/write path depends on these columns.
+- `cpq_products.brake_reverse` + `cpq_products.brake_non_reverse` were removed in this wave; no runtime read path or `cpq_products_flat` fallback depends on these columns.
+- `cpq_products.position29` + `cpq_products.position30` were removed in the prior wave and remain absent.
 - Documentation and baseline inventory alignment.
 
 ## Needs staged verification
@@ -90,7 +92,7 @@ Date reconciled: **April 8, 2026** (cpq_import_runs + cpq_products cleanup wave)
 - Full `sku_rules` retirement.
 
 ## Resolved in this run
-- Staged `cpq_products` cleanup by dropping dead `position29` + `position30` placeholders with additive rollback posture.
+- Staged `cpq_products` cleanup by dropping `brake_reverse` + `brake_non_reverse` in a low-risk micro-batch with additive rollback posture.
 - `cpq_import_runs` status clarified as transitional diagnostics table that is still read/write-touched by generation lifecycle handling.
 
 ---
@@ -98,5 +100,5 @@ Date reconciled: **April 8, 2026** (cpq_import_runs + cpq_products cleanup wave)
 ## 5) Next operationally-safe action
 
 This run shipped one low-risk schema change and one sequencing decision:
-1. Drop `cpq_products.position29` + `position30` in migration `016_cpq_products_drop_position_columns.sql`.
+1. Drop `cpq_products.brake_reverse` + `brake_non_reverse` in migration `017_cpq_products_drop_brake_columns.sql`.
 2. Keep `cpq_import_runs` intact for now, and target a dedicated retirement run after run-creation and diagnostics ownership are redesigned.

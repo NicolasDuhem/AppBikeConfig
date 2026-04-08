@@ -1,6 +1,6 @@
 # Runtime vs DB gap analysis (CSV truth)
 
-Date: April 8, 2026 (cpq_import_runs + cpq_products wave).
+Date: April 8, 2026 (dedicated cpq_products small-batch wave).
 
 ## Major gaps
 
@@ -35,5 +35,6 @@ The runtime is anchored on:
 ## 5) Current wave decisions
 
 - `cpq_import_runs` remains transitional-but-active: `/api/cpq/generate` GET still reads run metadata and writes lifecycle/error state.
-- `cpq_products` cleanup advanced with a low-risk drop of `position29` and `position30` (migration `016`), based on no in-repo runtime/view/migration dependency.
-- Remaining `cpq_products` denormalized columns are still compatibility-backed through `cpq_products_flat` fallback projection and should be retired in staged batches.
+- `cpq_products` cleanup advanced with a low-risk drop of `brake_reverse` and `brake_non_reverse` (migration `017`), based on no in-repo runtime read and no `cpq_products_flat` fallback dependency.
+- Prior low-risk drop: `position29` and `position30` (migration `016`).
+- Remaining `cpq_products` denormalized columns are still compatibility-backed through `cpq_products_flat` fallback projection and should be retired only in staged batches after fallback reduction for each target subset.

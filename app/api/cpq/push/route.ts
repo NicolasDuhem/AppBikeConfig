@@ -64,16 +64,12 @@ export async function POST(request: Request) {
       insert into cpq_products (
         import_run_id,
         cpq_ruleset,
-        brake_reverse,
-        brake_non_reverse,
         sku_code,
         created_by
       )
       values (
         ${runId || null},
         ${cpqRuleset},
-        ${brakeMode === 'reverse' ? 'yes' : 'no'},
-        ${brakeMode === 'non_reverse' ? 'yes' : 'no'},
         ${skuCode},
         ${auth.user.id}
       )
