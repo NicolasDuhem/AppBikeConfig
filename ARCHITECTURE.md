@@ -23,6 +23,8 @@ Routing/UI evidence:
 ### 3.1 Canonical SKU definition
 `cpq_import_rows` is the active source for Product - SKU definition and CPQ option hydration.
 
+`cpq_import_row_translations` now provides optional locale overrides per canonical row (`cpq_import_row_id + locale`) managed from the Product - SKU definition > Translations subsection. Locale options come from `cpq_countries.locale_code`.
+
 ### 3.2 Generation and push
 - `/api/cpq/options` reads active `cpq_import_rows` + setup config.
 - `/api/cpq/generate` POST builds combinations in-memory.
@@ -48,10 +50,9 @@ Instrumented paths:
 
 ## 5) Active vs compatibility vs uncertain
 
-- **Active canonical:** `cpq_import_rows`, `cpq_product_attributes`, `cpq_sku_rules`, `cpq_countries`, `cpq_availability`, `sku_digit_option_config`, `sku_generation_dependency_rules`.
+- **Active canonical:** `cpq_import_rows`, `cpq_import_row_translations`, `cpq_product_attributes`, `cpq_sku_rules`, `cpq_countries` (including `locale_code`), `cpq_availability`, `sku_digit_option_config`, `sku_generation_dependency_rules`.
 - **Compatibility still runtime-reachable:** `products`, `countries`, `availability`, `/api/builder-push`, `/api/setup-options`.
 - **Partial migration-era:** `cpq_import_runs` (GET diagnostics updates still reachable; no in-repo create flow).
-- **Likely unused in repo:** `cpq_import_row_translations` (no runtime references found).
 
 ## 6) Documentation governance
 
