@@ -4,7 +4,7 @@
 
 Detailed operational process/data map for AppBikeConfig CPQ runtime, reconciled with CSV database truth.
 
-Date reconciled: **April 8, 2026** (dedicated cpq_products small-batch cleanup wave).
+Date reconciled: **April 8, 2026** (cpq_products_flat fallback-reduction wave: product identity subset).
 
 ---
 
@@ -64,7 +64,8 @@ Date reconciled: **April 8, 2026** (dedicated cpq_products small-batch cleanup w
 ## 2.6 Push + matrix operations
 
 - `/api/cpq/push` writes `cpq_products`, `cpq_product_attributes`, `cpq_sku_rules`, `cpq_availability`.
-- In this wave, push row creation no longer writes `cpq_products.brake_reverse` / `cpq_products.brake_non_reverse`; brake semantics remain represented via `cpq_product_attributes` (`BrakeReverse` / `BrakeNonReverse`) and `cpq_sku_rules.brake_type`.
+- In this wave, `cpq_products_flat` no longer falls back to raw `cpq_products` columns for `ProductAssist`/`ProductFamily`/`ProductLine`/`ProductModel`/`ProductType`; these values now resolve from normalized attributes only.
+- Prior wave behavior remains: push row creation no longer writes `cpq_products.brake_reverse` / `cpq_products.brake_non_reverse`; brake semantics remain represented via `cpq_product_attributes` (`BrakeReverse` / `BrakeNonReverse`) and `cpq_sku_rules.brake_type`.
 - `/api/cpq-matrix*` reads/writes matrix tables + availability + countries; optional assets flow reads/writes `cpq_product_assets`.
 - Matrix integrity depends on FK + domain checks in CPQ tables.
 
@@ -82,7 +83,8 @@ Date reconciled: **April 8, 2026** (dedicated cpq_products small-batch cleanup w
 
 ## Safe now
 - Column cleanup in non-critical residue fields (`cpq_import_rows.raw_*`) is complete via explicit drop migration from prior wave.
-- `cpq_products.brake_reverse` + `cpq_products.brake_non_reverse` were removed in this wave; no runtime read path or `cpq_products_flat` fallback depends on these columns.
+- `cpq_products.product_assist` + `product_family` + `product_line` + `product_model` + `product_type` were removed in this wave after detaching `cpq_products_flat` fallback for those fields.
+- `cpq_products.brake_reverse` + `cpq_products.brake_non_reverse` were removed in the prior wave; no runtime read path or `cpq_products_flat` fallback depends on these columns.
 - `cpq_products.position29` + `cpq_products.position30` were removed in the prior wave and remain absent.
 - Documentation and baseline inventory alignment.
 
@@ -92,13 +94,13 @@ Date reconciled: **April 8, 2026** (dedicated cpq_products small-batch cleanup w
 - Full `sku_rules` retirement.
 
 ## Resolved in this run
-- Staged `cpq_products` cleanup by dropping `brake_reverse` + `brake_non_reverse` in a low-risk micro-batch with additive rollback posture.
+- Staged `cpq_products` cleanup by removing `cpq_products_flat` fallback for `ProductAssist`/`ProductFamily`/`ProductLine`/`ProductModel`/`ProductType` and dropping the matched legacy columns in migration `018`.
 - `cpq_import_runs` status clarified as transitional diagnostics table that is still read/write-touched by generation lifecycle handling.
 
 ---
 
 ## 5) Next operationally-safe action
 
-This run shipped one low-risk schema change and one sequencing decision:
-1. Drop `cpq_products.brake_reverse` + `brake_non_reverse` in migration `017_cpq_products_drop_brake_columns.sql`.
+This run shipped one paired fallback-reduction/drop change and one sequencing decision:
+1. Remove `cpq_products_flat` fallback for `ProductAssist`/`ProductFamily`/`ProductLine`/`ProductModel`/`ProductType`, then drop matched `cpq_products` columns in migration `018_cpq_products_flat_remove_identity_fallback.sql`.
 2. Keep `cpq_import_runs` intact for now, and target a dedicated retirement run after run-creation and diagnostics ownership are redesigned.
