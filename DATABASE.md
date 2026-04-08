@@ -19,7 +19,7 @@ Date of reconciliation: **April 8, 2026**.
 
 1. Runtime is fully CPQ-oriented: active tables are CPQ + RBAC + feature flags + audit.
 2. The fresh CSV schema/constraints snapshot contains **21 objects** and does **not** include legacy runtime-era tables (`products`, `countries`, `availability`, `setup_options`).
-3. `sql/schema.sql` still defines those historical objects, so there is a **repo baseline vs live-schema gap**.
+3. `sql/schema.sql` has now been cleaned to remove those historical objects, closing the prior **repo baseline vs live-schema gap** for `products`, `countries`, `availability`, and `setup_options`.
 4. `sku_rules` still exists in the fresh CSV snapshot but appears runtime-unused outside migrations/seed and legacy checks.
 5. CPQ integrity depends on a small set of constraints/FKs/checks that should be treated as non-negotiable for cleanup work.
 
@@ -53,7 +53,7 @@ Date of reconciliation: **April 8, 2026**.
 
 | Object | Current status | Evidence of non-runtime use | Risk | Recommendation |
 |---|---|---|---|---|
-| `products`, `countries`, `availability`, `setup_options` | Historical schema objects in repo SQL baseline | Not present in fresh CSV schema snapshot; no active runtime API writes/reads | Medium (possible external SQL dependency) | Safe to remove from repo baseline SQL after external dependency signoff |
+| `products`, `countries`, `availability`, `setup_options` | Historical schema objects (removed from forward baseline SQL/seed in this pass) | Not present in fresh CSV schema snapshot; no active runtime API writes/reads | Medium (possible external SQL dependency in pre-existing DBs) | Keep out of forward baseline; handle physical drops with explicit migration when dependency watchlist is clear |
 | `sku_rules` | Historical/transitional schema artifact | Present in fresh CSV snapshot, but runtime queries use `cpq_import_rows` and CPQ tables | Medium-high (still physically present in some DBs and referenced by old migrations) | Do not drop immediately; run focused dependency verification then staged retirement |
 
 ---
@@ -144,10 +144,10 @@ Enforced in migrations and relied upon by API behavior:
 
 ## 5) Runtime-vs-schema discrepancies to track
 
-1. **Fresh CSV schema excludes `products/countries/availability/setup_options`, but `sql/schema.sql` still creates them.**
-   - Interpretation: live environment captured by CSV is further cleaned than repo baseline SQL.
+1. **Fresh CSV schema excludes `products/countries/availability/setup_options`, and forward baseline SQL now matches that posture.**
+   - Interpretation: this historical baseline mismatch is resolved in-repo; physical legacy tables may still exist only in older provisioned environments.
 2. `sku_rules` persists in both repo SQL and fresh CSV schema but is not a runtime table.
-3. Repo migration history still contains legacy-era index/constraint maintenance for `sku_rules`; this is safe for historical replay but should be isolated from forward-looking baseline.
+3. Repo migration history still contains legacy-era index/constraint maintenance for `sku_rules`; this remains acceptable for historical replay while retirement is staged.
 
 ---
 
@@ -155,7 +155,7 @@ Enforced in migrations and relied upon by API behavior:
 
 | Object family | Removal readiness | Prerequisites | Certainty |
 |---|---|---|---|
-| `products`, `countries`, `availability`, `setup_options` definitions in repo baseline SQL/docs | **Ready to prepare immediate removal** | Confirm no external consumers rely on bootstrap `sql/schema.sql`; then delete definitions and legacy seed rows | High |
+| `products`, `countries`, `availability`, `setup_options` definitions in repo baseline SQL/docs | **Completed in this pass** | Baseline definitions and seed rows removed; continue external dependency watch for physical DB cleanup sequencing | High |
 | `sku_rules` table and its legacy indexes/constraints | **Prepare-only (not immediate drop)** | Run dependency watchlist verification (external SQL clients, reporting jobs, ad-hoc scripts), then stage deprecation migration | Medium |
 | Legacy references in non-authoritative docs/artifacts | **Safe now** | Update generated/runtime inventory and retirement docs in same PR | High |
 
@@ -163,15 +163,15 @@ Enforced in migrations and relied upon by API behavior:
 
 ## 7) Recommended next cleanup step (concrete)
 
-**Next run should be a schema migration + baseline cleanup pass with this sequence:**
+**Next run should be a guarded physical-cleanup preparation pass with this sequence:**
 
-1. **Stage 1 (immediate):** remove historical table definitions (`products`, `countries`, `availability`, `setup_options`) from forward baseline docs/`sql/schema.sql` and stop seeding them.
-2. **Stage 2 (guarded):** add a deprecation migration that marks `sku_rules` as retirement candidate (or archive rename) without immediate hard drop.
-3. **Stage 3 (after verification window):** drop `sku_rules` and its legacy indexes/constraints once external dependency watchlist is clear.
+1. **Stage 1 (completed):** historical table definitions (`products`, `countries`, `availability`, `setup_options`) were removed from forward baseline docs/`sql/schema.sql` and no longer seeded.
+2. **Stage 2 (next):** run dependency verification for `sku_rules` and historical physical tables in existing DBs; then add a deprecation/retirement migration plan (comment metadata or archive naming) without hard drop.
+3. **Stage 3 (after verification window):** execute physical drop migrations for staged legacy objects (`sku_rules` and any remaining historical tables), including legacy indexes/constraints cleanup.
 
 Rollback posture:
-- Stage 1 rollback: reintroduce definitions from git if needed.
-- Stage 2/3 rollback: restore from migration down scripts or schema backup snapshot.
+- Stage 2 rollback: pause retirement and retain objects unchanged.
+- Stage 3 rollback: restore from migration down scripts or schema backup snapshot.
 
 ---
 

@@ -12,10 +12,10 @@ This document provides a concrete, sequenced cleanup/removal plan grounded in:
 
 | Object | Current status | Evidence | Risk level | Recommendation | Prerequisites | Certainty |
 |---|---|---|---|---|---|---|
-| `products` | Historical (repo baseline only) | Appears in `sql/schema.sql` and seed SQL; absent from fresh CSV schema; no runtime API reads/writes | Medium | Remove from forward baseline SQL and seeds | External dependency check (reporting/jobs/manual SQL) | High |
-| `countries` (legacy) | Historical (repo baseline only) | Same as above; runtime uses `cpq_countries` | Medium | Remove from forward baseline SQL and seeds | External dependency check | High |
-| `availability` (legacy) | Historical (repo baseline only) | Same as above; runtime uses `cpq_availability` | Medium | Remove from forward baseline SQL and seeds | External dependency check | High |
-| `setup_options` | Historical (repo baseline only) | Defined in baseline SQL; runtime uses setup config tables | Medium | Remove from forward baseline SQL and seeds | External dependency check | High |
+| `products` | Historical (forward baseline retired) | Removed from `sql/schema.sql`/`sql/seed.sql` in this pass; absent from fresh CSV schema; no runtime API reads/writes | Medium | Keep retired in baseline; schedule physical drop via explicit migration after dependency watchlist clears | External dependency check (reporting/jobs/manual SQL) | High |
+| `countries` (legacy) | Historical (forward baseline retired) | Removed from `sql/schema.sql`/`sql/seed.sql` in this pass; runtime uses `cpq_countries` | Medium | Keep retired in baseline; schedule physical drop via explicit migration after dependency watchlist clears | External dependency check | High |
+| `availability` (legacy) | Historical (forward baseline retired) | Removed from `sql/schema.sql`/`sql/seed.sql` in this pass; runtime uses `cpq_availability` | Medium | Keep retired in baseline; schedule physical drop via explicit migration after dependency watchlist clears | External dependency check | High |
+| `setup_options` | Historical (forward baseline retired) | Removed from `sql/schema.sql`/`sql/seed.sql` in this pass; runtime uses setup config tables | Medium | Keep retired in baseline; schedule physical drop via explicit migration after dependency watchlist clears | External dependency check | High |
 | `sku_rules` | Historical/transitional physical object | Present in fresh CSV schema + legacy migrations; runtime path uses `cpq_import_rows` | Medium-high | Stage deprecation first; drop only after watchlist clears | Direct dependency verification + grace window | Medium |
 | Legacy indexes/constraints on `sku_rules` | Historical technical debt | Present in old SQL migrations/constraints logic | Medium | Remove when `sku_rules` removal executes | Same as `sku_rules` | Medium |
 
@@ -31,15 +31,16 @@ If any are found, create migration bridge plan first (view aliases, temporary co
 
 ## 3) Sequenced execution plan
 
-## Phase A — Immediate cleanup prep (next run)
+## Phase A — Immediate baseline cleanup (completed April 8, 2026)
 
-1. Update `sql/schema.sql` to remove legacy table definitions that are absent from live schema snapshot:
+1. `sql/schema.sql` no longer defines the legacy tables absent from current schema truth:
    - `products`
    - `countries`
    - `availability`
    - `setup_options`
-2. Update `sql/seed.sql` to remove legacy inserts tied exclusively to those objects.
-3. Keep explicit notes that `sku_rules` remains staged-retained pending verification.
+2. `sql/seed.sql` no longer inserts into those legacy objects.
+3. `cpq_countries` seed data is now seeded directly (without relying on legacy `countries`) to keep CPQ locale/country initialization explicit.
+4. `sku_rules` remains staged-retained pending verification.
 
 Rollback: restore removed definitions from version control.
 
@@ -73,8 +74,8 @@ Do **not** retire CPQ constraints that enforce live invariants (`cpq_sku_rules`,
 
 **Recommended next Codex run:**
 
-> Execute a migration/baseline cleanup focused on removing legacy baseline definitions (`products`, `countries`, `availability`, `setup_options`) from `sql/schema.sql` and `sql/seed.sql`, while preparing (not yet dropping) `sku_rules` with an explicit external dependency verification checklist.
+> Execute a `sku_rules` verification + physical-drop planning run: verify dependency watchlist evidence, define staged deprecation migration details, and prepare (but do not execute blindly) final drop sequencing for legacy physical tables in already-provisioned databases.
 
 Rationale:
-- Highest confidence, lowest runtime risk cleanup is available now.
-- This reduces schema debt immediately while preserving safe staged handling for the only medium-certainty object (`sku_rules`).
+- Forward baseline cleanup is complete for high-certainty historical objects.
+- The remaining risk sits in physical-environment cleanup and staged `sku_rules` retirement.

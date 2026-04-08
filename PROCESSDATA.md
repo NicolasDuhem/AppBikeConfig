@@ -345,8 +345,8 @@ Runtime note:
 Explicitly retired runtime APIs: `/api/matrix*`, `/api/builder-push`, `/api/countries`, `/api/setup-options`.
 
 Schema-history objects still relevant to cleanup planning:
-- `products`, `countries`, `availability`, `setup_options` (legacy baseline definitions).
-- `sku_rules` (still physically present in some schemas but not active runtime table).
+- `products`, `countries`, `availability`, `setup_options` (removed from forward baseline SQL/seed in this pass; may still exist physically in older DB environments).
+- `sku_rules` (still physically present in current schema snapshots and retained as staged prepare-only object).
 
 These objects should be treated as **retirement planning inputs**, not runtime process dependencies.
 
@@ -354,8 +354,8 @@ These objects should be treated as **retirement planning inputs**, not runtime p
 
 ## 4) Process-level cleanup implications
 
-1. No active process depends on legacy matrix-era tables.
-2. Transitional risk centers on `cpq_import_runs` diagnostics and residual `sku_rules` presence.
-3. Most cleanup risk is external-dependency uncertainty, not in-repo runtime coupling.
+1. No active process depends on the retired legacy matrix-era tables removed from forward baseline SQL (`products`, `countries`, `availability`, `setup_options`).
+2. Transitional risk now centers on physical-environment variance and residual `sku_rules` presence.
+3. Most remaining cleanup risk is external-dependency uncertainty, not in-repo runtime coupling.
 
 See `docs/database-cleanup-recommendations.md` for sequenced drop/retire actions.
