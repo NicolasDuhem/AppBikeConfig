@@ -229,7 +229,7 @@ export default function CpqFeatureClient() {
                           checked={(selectedCodesByDigit[group.digitPosition] || []).includes(choice.codeValue)}
                           onChange={() => setDigitChoice(group.digitPosition, choice.codeValue, group.selectionMode)}
                         />
-                        {choice.codeValue} · {choice.choiceValue}
+                        <span className="digitChoiceLabel">{choice.codeValue} · {choice.choiceValue}</span>
                       </label>
                     ))}
                   </div>
