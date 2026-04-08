@@ -1,6 +1,6 @@
 # Database cleanup master plan (CSV truth reconciliation)
 
-Date: **April 8, 2026** (cpq_products_flat fallback-reduction wave: product identity subset).
+Date: **April 8, 2026** (cpq_products_flat fallback-reduction wave: remaining compatibility subset).
 Primary truth inputs: `database schema.csv` and `database constraints.csv`.
 
 ## 1) Reconciliation scope and method
@@ -97,7 +97,9 @@ Risk class: previously high; now mitigated by explicit schema support.
   - Evidence: no `cpq_products_flat` dependency, no in-repo runtime reads, push write-path migrated to avoid inserting these columns.
 - **Dropped in this wave (paired fallback reduction + drop):** `product_assist`, `product_family`, `product_line`, `product_model`, `product_type` via migration `018_cpq_products_flat_remove_identity_fallback.sql`.
   - Evidence: `cpq_products_flat` now projects these fields directly from normalized attributes (`max(choice_value)` on `cpq_product_attributes`/`cpq_import_rows`) with no `p.legacy_column` fallback, and runtime reads target `cpq_products_flat` rather than raw `cpq_products` columns.
-- **Compatibility-backed (used by `cpq_products_flat` fallback projection):** `handlebar_type`, `speeds`, `mudguardsandrack`, `territory`, `mainframecolour`, `rearframecolour`, `frontcarrierblock`, `lighting`, `saddleheight`, `gearratio`, `saddle`, `tyre`, `brakes`, `pedals`, `saddlebag`, `suspension`, `biketype`, `toolkit`, `saddlelight`, `configcode`, `optionbox`, `framematerial`, `frameset`, `componentcolour`, `onbikeaccessories`, `handlebarstemcolour`, `handlebarpincolour`, `frontframecolour`, `frontforkcolour`.
+- **Dropped in this wave (final fallback-coupled subset):** `handlebar_type`, `speeds`, `mudguardsandrack`, `territory`, `mainframecolour`, `rearframecolour`, `frontcarrierblock`, `lighting`, `saddleheight`, `gearratio`, `saddle`, `tyre`, `brakes`, `pedals`, `saddlebag`, `suspension`, `biketype`, `toolkit`, `saddlelight`, `configcode`, `optionbox`, `framematerial`, `frameset`, `componentcolour`, `onbikeaccessories`, `handlebarstemcolour`, `handlebarpincolour`, `frontframecolour`, `frontforkcolour` via migration `019_cpq_products_flat_remove_remaining_fallback.sql`.
+  - Evidence: `cpq_products_flat` now projects these fields from normalized attributes only (`max(choice_value)`), and runtime reads consume the view projection.
+- **Compatibility residue left intentionally:** `description` (not projected via fallback; track as a small separate cleanup candidate).
 - **Removed in prior wave (no runtime/migration/view dependency):** `position29`, `position30` via migration `016_cpq_products_drop_position_columns.sql`.
 - **Decision:** continue with dedicated column-drop batches only after each candidate is proven absent from runtime SQL and compatibility projection requirements.
 
@@ -190,8 +192,8 @@ Rollback: re-add columns nullable with defaults; no data-critical semantics expe
 
 ## Stage C (column cleanup wave 2)
 
-1. Continue `cpq_products` legacy payload reduction in one final small fallback-reduction/drop batch (remaining compatibility fields still tied to `coalesce(..., p.column)` projection).
-2. Prune unused `cpq_import_runs` payload columns only after diagnostics lifecycle replacement is shipped.
+1. Completed in migration `019`: final `cpq_products` fallback-coupled payload reduction (`coalesce(..., p.column)` compatibility fields removed from view + matched column drops).
+2. Next target: prune/retire `cpq_import_runs` payload only after diagnostics lifecycle replacement is shipped.
 
 Rollback: additive restore migration from backup snapshot.
 
@@ -211,9 +213,9 @@ Rollback: restore table from pre-drop backup or down migration.
 
 ## 10) Immediate next action (non-vague)
 
-**This run delivered one paired fallback-reduction/drop wave plus sequencing lock:**
-1. Removal of `cpq_products_flat` fallback for product identity fields (`ProductAssist`, `ProductFamily`, `ProductLine`, `ProductModel`, `ProductType`) and matched column drop (`cpq_products.product_assist`, `product_family`, `product_line`, `product_model`, `product_type`) in migration `018`.
-2. Prior low-risk drops remain in place (`016` position placeholders, `017` brake compatibility columns).
+**This run delivered the final `cpq_products` fallback-reduction/drop wave plus sequencing lock:**
+1. Removal of remaining `cpq_products_flat` fallback for compatibility attributes and matched column drop in migration `019`.
+2. Prior low-risk drops remain in place (`016` position placeholders, `017` brake compatibility columns, `018` product identity columns).
 3. Explicit decision to keep `cpq_import_runs` intact until diagnostics ownership replacement.
 
-Recommended next cleanup target: **another dedicated `cpq_products` fallback-reduction + column-drop batch**, then `cpq_import_runs` retirement prep, then `sku_rules` replacement/removal prep.
+Recommended next cleanup target: **cpq_import_runs retirement prep**, then `sku_rules` replacement/removal prep.
