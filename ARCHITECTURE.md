@@ -81,12 +81,12 @@ These are continuity redirects only.
 ### 5.1 Fresh schema snapshot truth
 `database schema.csv` and `database constraints.csv` describe a CPQ-first schema set (21 objects), including `sku_rules` but excluding old `products/countries/availability/setup_options`.
 
-### 5.2 Repo baseline gap
-`sql/schema.sql` still carries legacy table definitions from pre-cutover eras.
+### 5.2 Baseline SQL alignment status
+The baseline cleanup run on **April 8, 2026** removed legacy table definitions for `products`, `countries`, `availability`, and `setup_options` from `sql/schema.sql`, and removed their historical seed inserts from `sql/seed.sql`.
 
 Architectural implication:
-- Runtime architecture is already CPQ-only.
-- Baseline SQL cleanup is the remaining architecture/documentation debt.
+- Runtime architecture and forward baseline SQL are now aligned around CPQ-first objects.
+- Physical DBs created before this cleanup may still contain those historical tables until explicit drop migrations are executed.
 
 ## 6) Historical context (explicitly non-runtime)
 
@@ -99,12 +99,12 @@ Removed runtime APIs/services:
 
 These should be treated as retired implementation history, not active architecture.
 
-## 7) Architecture-level cleanup recommendation
+## 7) Architecture-level staged retirement posture
 
-Best next action is a **forward-baseline database cleanup run**:
-1. remove legacy table definitions from baseline SQL and seeds,
-2. keep `sku_rules` as staged-deprecation until external dependency watchlist is cleared,
-3. then execute explicit `sku_rules` drop migration.
+Current posture after the baseline cleanup:
+1. `products`, `countries`, `availability`, and `setup_options` are retired from forward baseline SQL/seed history.
+2. `sku_rules` remains intentionally staged as prepare-only because it is still present in fresh schema snapshots and legacy migration replay history.
+3. The next architectural cleanup step is **dependency verification + physical drop planning** for `sku_rules` and any remaining historical tables in already-provisioned databases.
 
 ## 8) Documentation governance
 
