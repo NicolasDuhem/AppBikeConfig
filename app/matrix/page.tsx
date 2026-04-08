@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * @deprecated Legacy compatibility UI path.
+ * New product UX must target CPQ canonical pages.
+ */
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Country, MatrixRow } from '@/lib/types';

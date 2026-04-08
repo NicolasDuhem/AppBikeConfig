@@ -1,9 +1,14 @@
 import { NextResponse } from 'next/server';
+
+/**
+ * @deprecated Legacy compatibility API path.
+ * New product work must target CPQ canonical APIs.
+ */
 import { requireApiLogin } from '@/lib/api-auth';
 import { writeAuditLog } from '@/lib/audit';
 import { checkVariantSkuExists } from '@/lib/bigcommerce';
 import { updateMatrixBcStatus } from '@/lib/matrix-service';
-import { trackLegacyPathInvocation } from '@/lib/deprecation-telemetry';
+import { LEGACY_PATH_KEYS, trackLegacyPathInvocation } from '@/lib/deprecation-telemetry';
 
 type RequestedRow = {
   id?: number;
@@ -20,7 +25,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'rows are required' }, { status: 400 });
   }
 
-  await trackLegacyPathInvocation({ pathKey: 'legacy.matrix.check_bc_status', route: '/api/matrix/check-bc-status', method: 'POST', userId: auth.user.id, details: { rows: rows.length } });
+  await trackLegacyPathInvocation({ pathKey: LEGACY_PATH_KEYS.matrixCheckBcStatus, route: '/api/matrix/check-bc-status', method: 'POST', userId: auth.user.id, details: { rows: rows.length } });
 
   const uniqueSkus = Array.from(new Set(rows.map((row) => String(row.sku_code || '').trim())));
   const lookup = await checkVariantSkuExists(uniqueSkus);

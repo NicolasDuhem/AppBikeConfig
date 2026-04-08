@@ -5,7 +5,7 @@
 AppBikeConfig is actively running a **dual-track runtime** controlled by `feature_flags.import_csv_cpq`:
 
 - **CPQ canonical track (primary):** `/cpq-feature`, `/cpq-matrix`, `/api/cpq/*`, `/api/cpq-matrix/*`, canonical rows in `cpq_import_rows`, normalized attributes in `cpq_product_attributes`, and sales matrix in `cpq_sku_rules` + `cpq_availability` + `cpq_countries`.
-- **Legacy compatibility track (fallback):** `/matrix`, `/api/matrix*`, `/api/builder-push`, and legacy tables `products` + `availability` + `countries`.
+- **Legacy compatibility track (fallback):** `/matrix`, `/api/matrix*`, `/api/builder-push`, `/api/countries`, and legacy tables `products` + `availability` + `countries`.
 
 Routing/UI evidence:
 - `components/app-navigation.tsx` switches Matrix target by `import_csv_cpq` and hides legacy builder when CPQ is on.
@@ -43,6 +43,7 @@ Instrumented paths:
 - `/api/matrix/check-bc-status`
 - `/api/builder-push`
 - `/api/setup-options` (GET/POST/DELETE)
+- `/api/countries` (GET/POST)
 - `/api/cpq/generate` GET (`run_id` diagnostics path tied to `cpq_import_runs`)
 
 ## 5) Active vs compatibility vs uncertain
@@ -62,3 +63,10 @@ Guardrails added:
 - `CONTRIBUTING.md` checklist
 - `.github/pull_request_template.md` checklist
 - `scripts/check-doc-governance.mjs`
+
+
+## 7) Deprecation posture
+
+- Legacy compatibility surfaces are explicitly **do-not-extend** unless the change is directly for deprecation safety/telemetry.
+- New product capabilities must target canonical CPQ routes/tables first.
+- Removal sequencing and risk gating are tracked in `docs/legacy-deprecation-plan.md`.

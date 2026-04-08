@@ -2,10 +2,17 @@ import { NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { requireApiLogin, requireApiRole } from '@/lib/api-auth';
 import { writeAuditLog } from '@/lib/audit';
+import { LEGACY_PATH_KEYS, trackLegacyPathInvocation } from '@/lib/deprecation-telemetry';
 
+/**
+ * @deprecated Legacy compatibility API path for matrix country management.
+ * Keep only for compatibility mode (`import_csv_cpq=false`) until telemetry confirms zero usage.
+ */
 export async function GET() {
   const auth = await requireApiLogin();
   if (auth instanceof NextResponse) return auth;
+
+  await trackLegacyPathInvocation({ pathKey: LEGACY_PATH_KEYS.countriesRead, route: '/api/countries', method: 'GET', userId: auth.user.id });
 
   const rows = await sql`select id, country, region from countries order by region, country`;
   return NextResponse.json(rows);
@@ -19,6 +26,14 @@ export async function POST(request: Request) {
   const country = String(body.country || '').trim();
   const region = String(body.region || '').trim();
   if (!country || !region) return NextResponse.json({ error: 'country and region are required' }, { status: 400 });
+
+  await trackLegacyPathInvocation({
+    pathKey: LEGACY_PATH_KEYS.countriesWrite,
+    route: '/api/countries',
+    method: 'POST',
+    userId: auth.user.id,
+    details: { country, region }
+  });
 
   const rows = await sql`
     insert into countries (country, region)

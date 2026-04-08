@@ -79,9 +79,9 @@ Runtime process/data-flow reference for AppBikeConfig.
 - Entry points: `/matrix`, `/api/matrix`, `/api/matrix/save-all`, `/api/matrix/bulk-update`, `/api/matrix/check-bc-status`, `/api/builder-push`, `/api/countries`.
 - Reads/Writes: `products`, `countries`, `availability`, `audit_log`.
 - Feature flag: used when `import_csv_cpq=false`.
-- Telemetry: all major legacy matrix and builder endpoints now emit `deprecation.path_invoked`.
+- Telemetry: all major legacy matrix, countries, setup-options, and builder endpoints emit `deprecation.path_invoked`.
 
 ## 9) Additional artifacts
 
 - Structured runtime map: `docs/process-impact-map.md`
-- Deprecation sequencing: `docs/deprecation-plan.md`
+- Deprecation sequencing and removal gates: `docs/legacy-deprecation-plan.md`

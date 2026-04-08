@@ -6,7 +6,7 @@
 
 - [ ] I updated `DATABASE.md` for any schema/data behavior changes.
 - [ ] I updated `PROCESSDATA.md` for any process/data-flow changes.
-- [ ] If legacy/fallback behavior changed, I updated `docs/deprecation-plan.md` and telemetry where needed.
+- [ ] If legacy/fallback behavior changed, I updated `docs/legacy-deprecation-plan.md` and telemetry where needed.
 
 ## Runtime impact
 
@@ -16,3 +16,5 @@
 ## Validation
 
 - [ ] Tests/checks run locally and captured in PR description
+
+- [ ] I did not add new legacy compatibility path coupling (or explained why this deprecation-only change is needed).

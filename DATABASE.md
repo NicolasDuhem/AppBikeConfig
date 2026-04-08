@@ -54,8 +54,14 @@ Runtime-grounded schema inventory for AppBikeConfig. This document captures what
 - `cpq_import_runs` is still reachable for diagnostics but creation path appears external/retired in this repo.
 - `cpq_import_row_translations` has no references in code; keep as medium-certainty until external dependency audit is complete.
 - Legacy tables/routes remain reachable whenever `import_csv_cpq` is false.
+- `/api/countries` is now telemetry-instrumented as a compatibility endpoint and should not be extended for new features.
 
-## 5) Generated inventory artifacts
+## 5) Deprecation governance
+
+- Canonical-first rule: new product functionality must use CPQ tables, not `products/countries/availability` or `setup_options`.
+- Retirement gates and sequence: `docs/legacy-deprecation-plan.md`.
+
+## 6) Generated inventory artifacts
 
 - Human-readable heuristic scan: `docs/generated/db-usage-report.md`
 - Machine-friendly scan output: `docs/database-runtime-inventory.json`
