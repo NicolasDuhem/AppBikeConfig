@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "node --experimental-strip-types --experimental-specifier-resolution=node --test tests/*.test.ts"
+    "test": "node --experimental-strip-types --experimental-specifier-resolution=node --test tests/*.test.ts",
+    "analyze:db-usage": "node scripts/analyze-db-usage.mjs",
+    "check:doc-governance": "node scripts/check-doc-governance.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",

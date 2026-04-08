@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireApiRole } from '@/lib/api-auth';
 import { sql } from '@/lib/db';
 import { buildCpqCombinationsDetailed, CPQ_COLUMNS, mapOptionNameToCanonical, normalizeCharacter17 } from '@/lib/cpq-core';
+import { trackLegacyPathInvocation } from '@/lib/deprecation-telemetry';
 
 type SelectedDigitChoice = {
   digitPosition: number;
@@ -170,6 +171,8 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     runId = Number(searchParams.get('run_id') || 0);
     if (!runId) return NextResponse.json({ success: false, phase: 'generation_validation', error: 'run_id is required' }, { status: 400 });
+
+    await trackLegacyPathInvocation({ pathKey: 'cpq.import_runs.generate_get', route: '/api/cpq/generate', method: 'GET', userId: auth.user.id, details: { runId } });
 
     const runRows = await sql`select * from cpq_import_runs where id = ${runId} limit 1` as any[];
     if (!runRows.length) return NextResponse.json({ success: false, phase: 'generation_validation', error: 'Import run not found' }, { status: 404 });

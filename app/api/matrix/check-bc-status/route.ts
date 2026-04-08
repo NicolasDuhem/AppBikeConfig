@@ -3,6 +3,7 @@ import { requireApiLogin } from '@/lib/api-auth';
 import { writeAuditLog } from '@/lib/audit';
 import { checkVariantSkuExists } from '@/lib/bigcommerce';
 import { updateMatrixBcStatus } from '@/lib/matrix-service';
+import { trackLegacyPathInvocation } from '@/lib/deprecation-telemetry';
 
 type RequestedRow = {
   id?: number;
@@ -18,6 +19,8 @@ export async function POST(request: Request) {
   if (!rows.length) {
     return NextResponse.json({ error: 'rows are required' }, { status: 400 });
   }
+
+  await trackLegacyPathInvocation({ pathKey: 'legacy.matrix.check_bc_status', route: '/api/matrix/check-bc-status', method: 'POST', userId: auth.user.id, details: { rows: rows.length } });
 
   const uniqueSkus = Array.from(new Set(rows.map((row) => String(row.sku_code || '').trim())));
   const lookup = await checkVariantSkuExists(uniqueSkus);

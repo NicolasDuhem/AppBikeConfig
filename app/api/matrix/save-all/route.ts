@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireApiRole } from '@/lib/api-auth';
 import { upsertMatrixProduct } from '@/lib/matrix-service';
 import { writeAuditLog } from '@/lib/audit';
+import { trackLegacyPathInvocation } from '@/lib/deprecation-telemetry';
 
 export async function POST(request: Request) {
   const auth = await requireApiRole('matrix.update.single');
@@ -12,6 +13,8 @@ export async function POST(request: Request) {
   if (!rows.length) {
     return NextResponse.json({ error: 'No rows to save' }, { status: 400 });
   }
+
+  await trackLegacyPathInvocation({ pathKey: 'legacy.matrix.save_all', route: '/api/matrix/save-all', method: 'POST', userId: auth.user.id, details: { attempted: rows.length } });
 
   const failures: Array<{ rowKey: string; sku_code: string; reason: string }> = [];
   const successes: Array<{ id: number; sku_code: string }> = [];
