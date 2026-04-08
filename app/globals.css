@@ -127,6 +127,15 @@ th { position:sticky; top:0; background:#f8faff; z-index:1; }
 .adminPageActions { margin-bottom:8px; }
 .skuTableWrap { flex:1; }
 .countryBlocked { background:#eceff5; color:#6d7892; border-color:#c5cede; cursor:not-allowed; opacity:0.8; }
+.sectionTabs { display:flex; gap:8px; margin-bottom:8px; }
+.usersAdminLayout { display:grid; grid-template-rows:auto 1fr; gap:8px; min-height:0; flex:1; }
+.usersFormGrid { display:grid; grid-template-columns:repeat(2,minmax(220px,1fr)); gap:8px; margin-bottom:8px; }
+.usersFormGrid label, .sectionLabel { display:grid; gap:6px; font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; }
+.compactCheckboxList { background:#fff; }
+.checkboxRow { display:grid; grid-template-columns:auto 1fr; gap:6px 8px; align-items:start; font-size:13px; padding:3px 0; }
+.checkboxRow .subtle { grid-column:2; }
+.permissionOverrideRow { display:grid; gap:4px; margin-bottom:8px; }
+.roleAccessGrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(360px,1fr)); gap:8px; overflow:auto; padding-right:2px; }
 .bdamModal { width:min(1100px, 95vw); }
 .bdamEmbedWrap { display:grid; gap:10px; }
 .bdamFrame { width:100%; height:420px; border:1px solid var(--line); border-radius:12px; background:#f8faff; }
@@ -162,6 +171,8 @@ th { position:sticky; top:0; background:#f8faff; z-index:1; }
   .matrixFilters { position:static; max-height:none; }
   .matrixFilterGrid { grid-template-columns:1fr; }
   .modalGrid { grid-template-columns:1fr; }
+  .usersFormGrid { grid-template-columns:1fr; }
+  .roleAccessGrid { grid-template-columns:1fr; }
 }
 @media (max-width: 680px) {
   .addRuleGrid { grid-template-columns:1fr; }

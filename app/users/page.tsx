@@ -13,6 +13,35 @@ type AppUserRow = {
 type Role = { id: number; role_key: string; role_name: string };
 type Permission = { id: number; permission_key: string; permission_name: string; description: string };
 
+function CheckboxList({
+  options,
+  selected,
+  onToggle,
+  maxHeight = 180,
+  labelMap
+}: {
+  options: string[];
+  selected: string[];
+  onToggle: (value: string, checked: boolean) => void;
+  maxHeight?: number;
+  labelMap?: Record<string, string>;
+}) {
+  return (
+    <div className="listBox compactCheckboxList" style={{ maxHeight }}>
+      {options.map((value) => {
+        const checked = selected.includes(value);
+        return (
+          <label key={value} className="checkboxRow">
+            <input type="checkbox" checked={checked} onChange={(e) => onToggle(value, e.target.checked)} />
+            <span className="emphasis">{value}</span>
+            {labelMap?.[value] ? <span className="subtle">{labelMap[value]}</span> : null}
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
 function PermissionEditor({ user, permissions, onSave }: { user: AppUserRow; permissions: Permission[]; onSave: (overrides: Array<{ permission_key: string; granted: boolean }>) => Promise<void> }) {
   const [overrides, setOverrides] = useState<Record<string, 'inherit' | 'allow' | 'deny'>>({});
 
@@ -25,18 +54,19 @@ function PermissionEditor({ user, permissions, onSave }: { user: AppUserRow; per
   }, [user.user_permission_overrides]);
 
   return (
-    <div className="listBox" style={{ maxHeight: 180 }}>
+    <div className="listBox" style={{ maxHeight: 220 }}>
       {permissions.map((permission) => (
-        <label key={`${user.id}-${permission.permission_key}`} style={{ display: 'grid', gap: 4, marginBottom: 8 }}>
-          <span>{permission.permission_key}</span>
+        <label key={`${user.id}-${permission.permission_key}`} className="permissionOverrideRow">
+          <span className="emphasis">{permission.permission_key}</span>
           <select
             value={overrides[permission.permission_key] || 'inherit'}
             onChange={(e) => setOverrides((curr) => ({ ...curr, [permission.permission_key]: e.target.value as 'inherit' | 'allow' | 'deny' }))}
           >
-            <option value="inherit">Inherit role</option>
+            <option value="inherit">Inherit role baseline</option>
             <option value="allow">Allow</option>
             <option value="deny">Deny</option>
           </select>
+          {permission.description ? <span className="subtle">{permission.description}</span> : null}
         </label>
       ))}
       <button
@@ -58,6 +88,7 @@ export default function UsersPage() {
   const [roleBaselines, setRoleBaselines] = useState<Record<string, string[]>>({});
   const [loaded, setLoaded] = useState(false);
   const [status, setStatus] = useState('');
+  const [activeSection, setActiveSection] = useState<'users' | 'roles'>('users');
   const [form, setForm] = useState({ email: '', password: '', role_keys: [] as string[] });
 
   async function load() {
@@ -69,11 +100,13 @@ export default function UsersPage() {
       setLoaded(true);
       return;
     }
+
     const [usersRes, rolesRes, permsRes, baselineRes] = await Promise.all([fetch('/api/users'), fetch('/api/roles'), fetch('/api/permissions'), fetch('/api/role-permissions')]);
     setUsers(await usersRes.json());
     setRoles(await rolesRes.json());
     const perms = await permsRes.json();
     setPermissions(perms);
+
     const baselineRows = await baselineRes.json();
     const grouped: Record<string, string[]> = {};
     (baselineRows || []).forEach((row: any) => {
@@ -114,7 +147,7 @@ export default function UsersPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_id: user.id, role_keys: roleKeys })
     });
-    setStatus(res.ok ? 'Roles updated.' : 'Role update failed.');
+    setStatus(res.ok ? `Roles updated for ${user.email}.` : 'Role update failed.');
     await load();
   }
 
@@ -124,10 +157,9 @@ export default function UsersPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_id: user.id, permission_overrides: overrides })
     });
-    setStatus(res.ok ? 'Permission overrides updated.' : 'Permission overrides update failed.');
+    setStatus(res.ok ? `Permission overrides updated for ${user.email}.` : 'Permission overrides update failed.');
     await load();
   }
-
 
   async function saveRoleBaseline(roleKey: string, permissionKeys: string[]) {
     const res = await fetch('/api/role-permissions', {
@@ -140,107 +172,120 @@ export default function UsersPage() {
   }
 
   const roleOptions = useMemo(() => roles.map((role) => role.role_key), [roles]);
+  const roleLabels = useMemo(() => Object.fromEntries(roles.map((role) => [role.role_key, role.role_name])), [roles]);
+  const permissionOptions = useMemo(() => permissions.map((permission) => permission.permission_key), [permissions]);
 
   if (!loaded) return <AdminPageShell title="Admin - Users" subtitle="Manage AppBikeConfig user access."><div className="note compactNote">Loading...</div></AdminPageShell>;
   if (!allowed) return <AdminPageShell title="Admin - Users" subtitle="Manage AppBikeConfig user access."><div className="note compactNote">Only sys_admin can manage users and user permissions.</div></AdminPageShell>;
 
   return (
-    <AdminPageShell title="Admin - Users" subtitle="Create users, assign roles, and manage permission overrides (sys_admin only).">
-      <div className="note compactNote">Role is baseline; per-user permission overrides can explicitly allow or deny actions.</div>
-      <div className="subtle">{status}</div>
+    <AdminPageShell title="Admin - Users" subtitle="Manage users and role access baselines (sys_admin only).">
+      <div className="note compactNote">Role baseline defines default access. Per-user overrides can explicitly allow or deny actions.</div>
+      {status ? <div className="subtle">{status}</div> : null}
 
-      <div className="card compactCard" style={{ marginBottom: 6, display: 'grid', gap: 8 }}>
-        <input placeholder="Email" value={form.email} onChange={(e) => setForm((v) => ({ ...v, email: e.target.value }))} />
-        <input placeholder="Initial password" type="password" value={form.password} onChange={(e) => setForm((v) => ({ ...v, password: e.target.value }))} />
-        <div className="listBox">
-          {roleOptions.map((roleKey) => {
-            const checked = form.role_keys.includes(roleKey);
-            return (
-              <label key={roleKey} style={{ display: 'block' }}>
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={(e) => {
-                    setForm((curr) => ({
-                      ...curr,
-                      role_keys: e.target.checked
-                        ? [...curr.role_keys, roleKey]
-                        : curr.role_keys.filter((rk) => rk !== roleKey)
-                    }));
-                  }}
-                />{' '}
-                {roleKey}
+      <div className="sectionTabs" role="tablist" aria-label="Admin users sections">
+        <button className={activeSection === 'users' ? 'primary' : ''} onClick={() => setActiveSection('users')} role="tab" aria-selected={activeSection === 'users'}>
+          Manage Users
+        </button>
+        <button className={activeSection === 'roles' ? 'primary' : ''} onClick={() => setActiveSection('roles')} role="tab" aria-selected={activeSection === 'roles'}>
+          Manage Role Access
+        </button>
+      </div>
+
+      {activeSection === 'users' ? (
+        <div className="usersAdminLayout">
+          <div className="card compactCard">
+            <div className="filtersHeader"><strong>Create user</strong></div>
+            <div className="usersFormGrid">
+              <label>
+                Email
+                <input placeholder="name@company.com" value={form.email} onChange={(e) => setForm((v) => ({ ...v, email: e.target.value }))} />
               </label>
-            );
-          })}
+              <label>
+                Initial password
+                <input placeholder="Initial password" type="password" value={form.password} onChange={(e) => setForm((v) => ({ ...v, password: e.target.value }))} />
+              </label>
+            </div>
+            <label className="sectionLabel">Assign roles</label>
+            <CheckboxList
+              options={roleOptions}
+              selected={form.role_keys}
+              labelMap={roleLabels}
+              onToggle={(roleKey, checked) => {
+                setForm((curr) => ({
+                  ...curr,
+                  role_keys: checked ? [...curr.role_keys, roleKey] : curr.role_keys.filter((rk) => rk !== roleKey)
+                }));
+              }}
+              maxHeight={140}
+            />
+            <button className="primary" onClick={createUser}>Create user</button>
+          </div>
+
+          <div className="tableWrap tableViewport">
+            <table>
+              <thead><tr><th>User</th><th>Status</th><th>Role assignment</th><th>Permission overrides</th><th>Activation</th></tr></thead>
+              <tbody>
+                {users.map((user) => (
+                  <tr key={user.id}>
+                    <td>
+                      <div className="emphasis">{user.email}</div>
+                    </td>
+                    <td>{user.is_active ? <span className="statusPill ok">Active</span> : <span className="statusPill nok">Inactive</span>}</td>
+                    <td>
+                      <CheckboxList
+                        options={roleOptions}
+                        selected={user.roles || []}
+                        labelMap={roleLabels}
+                        maxHeight={120}
+                        onToggle={(roleKey, checked) => {
+                          const next = checked ? [...(user.roles || []), roleKey] : (user.roles || []).filter((rk) => rk !== roleKey);
+                          saveRoles(user, next);
+                        }}
+                      />
+                    </td>
+                    <td>
+                      <PermissionEditor user={user} permissions={permissions} onSave={(overrides) => savePermissionOverrides(user, overrides)} />
+                    </td>
+                    <td><button onClick={() => toggleActive(user)}>{user.is_active ? 'Deactivate' : 'Activate'}</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-        <button className="primary" onClick={createUser}>Create user</button>
-      </div>
-
-
-      <div className="card compactCard compactSection">
-        <div className="filtersHeader"><strong>Standard role base (role → permissions)</strong></div>
-        <div className="tableWrap" style={{ maxHeight: 280 }}>
-          <table>
-            <thead><tr><th>Role</th><th>Baseline permissions</th><th>Save</th></tr></thead>
-            <tbody>
-              {roleOptions.map((roleKey) => (
-                <tr key={`baseline-${roleKey}`}>
-                  <td className="emphasis">{roleKey}</td>
-                  <td>
-                    <select
-                      multiple
-                      className="multiSelect"
-                      value={roleBaselines[roleKey] || []}
-                      onChange={(e) => {
-                        const selected = Array.from(e.target.selectedOptions).map((option) => option.value);
-                        setRoleBaselines((curr) => ({ ...curr, [roleKey]: selected }));
-                      }}
-                    >
-                      {permissions.map((permission) => <option key={`${roleKey}-${permission.permission_key}`} value={permission.permission_key}>{permission.permission_key}</option>)}
-                    </select>
-                  </td>
-                  <td><button onClick={() => saveRoleBaseline(roleKey, roleBaselines[roleKey] || [])}>Save baseline</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      ) : (
+        <div className="roleAccessGrid">
+          <div className="note compactNote" style={{ gridColumn: '1 / -1' }}>
+            Standard role base (role → permissions).
+          </div>
+          {roleOptions.map((roleKey) => (
+            <section key={`baseline-${roleKey}`} className="card compactCard">
+              <div className="filtersHeader">
+                <div>
+                  <strong>{roleKey}</strong>
+                  {roleLabels[roleKey] ? <div className="subtle">{roleLabels[roleKey]}</div> : null}
+                </div>
+                <button onClick={() => saveRoleBaseline(roleKey, roleBaselines[roleKey] || [])}>Save baseline</button>
+              </div>
+              <label className="sectionLabel">Baseline permissions for {roleKey}</label>
+              <CheckboxList
+                options={permissionOptions}
+                selected={roleBaselines[roleKey] || []}
+                maxHeight={260}
+                onToggle={(permissionKey, checked) => {
+                  setRoleBaselines((curr) => ({
+                    ...curr,
+                    [roleKey]: checked
+                      ? [...(curr[roleKey] || []), permissionKey]
+                      : (curr[roleKey] || []).filter((key) => key !== permissionKey)
+                  }));
+                }}
+              />
+            </section>
+          ))}
         </div>
-      </div>
-
-      <div className="tableWrap tableViewport">
-        <table>
-          <thead><tr><th>Email</th><th>Active</th><th>Roles</th><th>Permission overrides</th><th>Toggle Active</th></tr></thead>
-          <tbody>
-            {users.map((user) => (
-              <tr key={user.id}>
-                <td>{user.email}</td>
-                <td>{user.is_active ? 'Yes' : 'No'}</td>
-                <td>
-                  {roleOptions.map((roleKey) => {
-                    const checked = (user.roles || []).includes(roleKey);
-                    return (
-                      <label key={`${user.id}-${roleKey}`} style={{ display: 'block' }}>
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(e) => {
-                            const next = e.target.checked ? [...(user.roles || []), roleKey] : (user.roles || []).filter((rk) => rk !== roleKey);
-                            saveRoles(user, next);
-                          }}
-                        />{' '}
-                        {roleKey}
-                      </label>
-                    );
-                  })}
-                </td>
-                <td><PermissionEditor user={user} permissions={permissions} onSave={(overrides) => savePermissionOverrides(user, overrides)} /></td>
-                <td><button onClick={() => toggleActive(user)}>{user.is_active ? 'Deactivate' : 'Activate'}</button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      )}
     </AdminPageShell>
   );
 }

@@ -91,7 +91,7 @@ export default function CpqMatrixPage() {
   const [pictureForm, setPictureForm] = useState<PictureFormState>({ asset_url: '', png_url: '', asset_id: '', notes: '' });
   const [pictureStatus, setPictureStatus] = useState('');
   const [iframeError, setIframeError] = useState(false);
-  const [showFilters, setShowFilters] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
 
   const canSingleUpdate = permissions.includes('matrix.update.single');
   const canBulkUpdate = permissions.includes('matrix.update.bulk');
