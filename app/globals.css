@@ -28,7 +28,7 @@ a { color: inherit; text-decoration: none; }
 button, input, select, textarea { border:1px solid var(--line); border-radius:10px; padding:8px 10px; font: inherit; }
 button { cursor:pointer; color:var(--accent); background:#fff; font-weight:700; }
 button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
-.tableWrap { overflow:auto; border:1px solid var(--line); border-radius:12px; background:#fff; max-height:none; min-height:0; }
+.tableWrap { overflow:auto; border:1px solid var(--line); border-radius:12px; background:#fff; max-height:none; min-height:0; min-width:0; width:100%; max-width:100%; }
 table { border-collapse: collapse; width:max-content; min-width:100%; }
 th, td { border:1px solid var(--line); padding:8px 10px; font-size:13px; }
 th { position:sticky; top:0; background:#f8faff; z-index:1; }
@@ -115,9 +115,9 @@ th { position:sticky; top:0; background:#f8faff; z-index:1; }
 .adminPage .pageHeader h2 { margin: 0 0 6px; }
 
 .adminPage { flex:1; display:flex; flex-direction:column; min-height:0; overflow:hidden; }
-.tableViewport { min-height:0; display:flex; flex-direction:column; flex:1; }
+.tableViewport { min-height:0; min-width:0; width:100%; max-width:100%; display:flex; flex-direction:column; flex:1; }
 .compactSection { margin-bottom:6px; }
-.adminContent { display: grid; gap: 6px; flex:1; min-height:0; overflow:hidden; align-content:start; }
+.adminContent { display:grid; grid-template-columns:minmax(0,1fr); gap:6px; flex:1; min-height:0; overflow:hidden; align-content:start; }
 .compactAdminPage { padding:8px; }
 .compactPageHeader { margin-bottom:4px; display:flex; align-items:flex-start; justify-content:space-between; gap:8px; flex-wrap:wrap; }
 .compactToolbar { gap:6px; margin-bottom:6px; }
@@ -146,7 +146,8 @@ th { position:sticky; top:0; background:#f8faff; z-index:1; }
 .cpqFeatureHeaderRow { display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; align-items:center; }
 .cpqFeatureFilePicker { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
 .cpqFeatureToolbar { margin-bottom:6px; }
-.cpqFeaturePage { min-width:0; display:grid; gap:6px; min-height:0; }
+.cpqFeaturePage { min-width:0; width:100%; max-width:100%; display:grid; grid-template-columns:minmax(0,1fr); gap:6px; min-height:0; }
+.cpqFeaturePage > * { min-width:0; max-width:100%; }
 .cpqMetaCard { min-width:0; }
 .cpqMetaGrid { grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); }
 .cpqFeatureHeaderActions { display:flex; gap:6px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
@@ -154,7 +155,7 @@ th { position:sticky; top:0; background:#f8faff; z-index:1; }
 .columnManagerCard { margin-bottom:8px; }
 .columnToggleGrid { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:6px 10px; }
 .featureFilterGrid { grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:10px; }
-.cpqFeatureTableWrap { flex:1; }
+.cpqFeatureTableWrap { flex:1; width:100%; max-width:100%; overflow:auto; }
 .cpqFeatureTable { min-width:1100px; }
 .digitFilterTitle { max-width:100%; line-height:1.25; }
 .digitFiltersViewport { border:1px solid var(--line); border-radius:12px; background:#f8faff; padding:10px; max-height:420px; overflow-y:auto; overflow-x:hidden; width:100%; max-width:100%; }
