@@ -9,9 +9,9 @@ If your change alters runtime data behavior, you must update both:
 
 This includes API query changes, table/column usage changes, migrations, feature-flag path changes, and any new/removed writes.
 
-## Deprecation telemetry contract
+## Transitional telemetry contract
 
-If you add or modify a legacy/fallback path, ensure it emits telemetry via `trackLegacyPathInvocation` in `lib/deprecation-telemetry.ts` so removal decisions remain evidence-based.
+If you add or modify a transitional (non-primary) path, ensure telemetry and audit traces are explicit so retirement decisions remain evidence-based.
 
 ## Suggested local checks
 

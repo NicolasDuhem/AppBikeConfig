@@ -1,10 +1,11 @@
 {
-  "generated_at": "2026-04-08T06:47:30.700Z",
-  "object_count": 24,
+  "generated_at": "2026-04-08T10:19:11.917Z",
+  "object_count": 23,
   "objects": [
     {
       "object": "app_users",
       "discovered_from": [
+        "app/api/sku-rule-translations/route.ts",
         "app/api/sku-rules/route.ts",
         "app/api/users/route.ts",
         "lib/auth.ts",
@@ -19,18 +20,8 @@
       ]
     },
     {
-      "object": "availability",
-      "discovered_from": [
-        "app/api/matrix/route.ts"
-      ]
-    },
-    {
       "object": "countries",
       "discovered_from": [
-        "app/api/builder-push/route.ts",
-        "app/api/countries/route.ts",
-        "app/api/matrix/route.ts",
-        "lib/matrix-service.ts",
         "sql/006_cpq_matrix_tables.sql",
         "sql/seed.sql"
       ]
@@ -47,7 +38,17 @@
         "app/api/cpq-matrix/bulk-update/route.ts",
         "app/api/cpq-matrix/route.ts",
         "app/api/cpq/push/route.ts",
-        "lib/cpq-matrix-service.ts"
+        "app/api/sku-rule-translations/route.ts",
+        "lib/cpq-matrix-service.ts",
+        "lib/cpq-runtime-locale.ts",
+        "sql/014_cpq_translation_management.sql"
+      ]
+    },
+    {
+      "object": "cpq_import_row_translations",
+      "discovered_from": [
+        "app/api/cpq/options/route.ts",
+        "app/api/sku-rule-translations/route.ts"
       ]
     },
     {
@@ -57,6 +58,7 @@
         "app/api/cpq/options/route.ts",
         "app/api/cpq/push/route.ts",
         "app/api/product-setup/route.ts",
+        "app/api/sku-rule-translations/route.ts",
         "app/api/sku-rules/route.ts",
         "sql/010_cpq_normalized_attributes_and_translations.sql",
         "sql/013_cpq_import_rows_canonical_and_role_baseline.sql"
@@ -126,9 +128,6 @@
     {
       "object": "products",
       "discovered_from": [
-        "app/api/matrix/bulk-update/route.ts",
-        "app/api/matrix/route.ts",
-        "lib/matrix-service.ts",
         "sql/seed.sql"
       ]
     },
@@ -147,12 +146,6 @@
         "app/api/users/route.ts",
         "lib/auth.ts",
         "sql/002_auth_rbac.sql"
-      ]
-    },
-    {
-      "object": "setup_options",
-      "discovered_from": [
-        "app/api/setup-options/route.ts"
       ]
     },
     {

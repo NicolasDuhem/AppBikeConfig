@@ -1,6 +1,6 @@
 # AppBikeConfig
 
-Next.js 14 App Router + Neon Postgres app for Matrix, Order, Setup, Product - SKU definition, and Bike Builder with mandatory login + role-based access control (RBAC).
+Next.js 14 App Router + Neon Postgres app for CPQ Sales - SKU vs Country, Product - Create SKU, Product - SKU definition, and Product - Setup with mandatory login + role-based access control (RBAC).
 
 ## Stack
 
@@ -104,23 +104,23 @@ Server-side authorization is enforced in API handlers. UI buttons are disabled w
 
 ## Restricted APIs
 
-- `POST /api/countries` -> `sys_admin`, `sales_admin`
-- `POST /api/matrix` -> `sys_admin`, `sales_admin`, `sales_standard`
-- `POST /api/matrix/bulk-update` -> `sys_admin`, `sales_admin`
-- `POST/DELETE /api/setup-options` -> `sys_admin`, `product_admin`
 - `POST /api/sku-rules` -> `sys_admin`, `product_admin`
-- `POST /api/builder-push` -> `sys_admin`, `product_admin`
+- `POST/PATCH /api/product-setup` -> `sys_admin`, `product_admin`
+- `POST /api/cpq/generate` -> `sys_admin`, `product_admin`
+- `POST /api/cpq/push` -> `sys_admin`, `product_admin`
+- `POST /api/cpq-matrix/save-all` -> `sys_admin`, `sales_admin`, `sales_standard`
+- `POST /api/cpq-matrix/bulk-update` -> `sys_admin`, `sales_admin`
+- `POST /api/cpq-matrix/picture` -> `sys_admin`, `sales_admin`
 - `/api/users*` -> `sys_admin`
 
 ## Audit log coverage
 
 Writes to `audit_log` for:
-- matrix single updates
-- matrix bulk updates
-- add country
-- setup option changes
-- SKU rule changes
-- builder push
+- SKU rule changes and translation edits
+- Product setup changes
+- CPQ push operations
+- CPQ matrix save-all/bulk/picture mutations
+- BigCommerce check status actions
 - user creation
 - role assignment
 - user deactivation/reactivation
@@ -149,12 +149,11 @@ Then manually test:
 1. Login at `/login`.
 2. Verify unauthorized users are redirected to `/login`.
 3. Verify role-based buttons/actions:
-   - Matrix save
-   - Matrix bulk update
-   - Add country
-   - Setup add/delete
-   - SKU rule add
-   - Builder push
+   - CPQ matrix save
+   - CPQ matrix bulk update
+   - Product setup save
+   - SKU rule add/edit
+   - CPQ generate + push
    - Users page
 4. Verify forbidden API calls return 403 for missing roles.
 

@@ -1,34 +1,3 @@
-export type Country = { id: number; country: string; region: string };
-export type MatrixRow = {
-  id: number;
-  sku_code: string;
-  handlebar: string;
-  speed: string;
-  rack: string;
-  bike_type: string;
-  colour: string;
-  light: string;
-  seatpost_length: string;
-  saddle: string;
-  description: string;
-  bc_status: 'ok' | 'nok' | '';
-  availability: Record<string, boolean>;
-};
-
-export type MatrixProductColumn =
-  | 'sku_code'
-  | 'handlebar'
-  | 'speed'
-  | 'rack'
-  | 'bike_type'
-  | 'colour'
-  | 'light'
-  | 'seatpost_length'
-  | 'saddle'
-  | 'description'
-  | 'bc_status';
-
-export type SetupOption = { id: number; option_name: string; choice_value: string; sort_order: number };
 export type SkuRule = {
   id: number;
   digit_position: number;
@@ -48,7 +17,6 @@ export type SkuDigitIssue = {
   option_names: string[];
 };
 
-
 export type SkuRuleTranslationRow = {
   cpq_import_row_id: number;
   digit_position: number;
@@ -61,12 +29,26 @@ export type SkuRuleTranslationRow = {
   translation_updated_by_email: string | null;
 };
 
-
 export type BrakeType = 'reverse' | 'non_reverse';
+
 export type CpqCountry = { id: number; country: string; region: string; brake_type: BrakeType; locale_code?: string };
-export type CpqMatrixRow = MatrixRow & {
+
+export type CpqMatrixRow = {
+  id: number;
   cpq_rule_id: number;
   cpq_ruleset: string;
+  sku_code: string;
+  handlebar: string;
+  speed: string;
+  rack: string;
+  bike_type: string;
+  colour: string;
+  light: string;
+  seatpost_length: string;
+  saddle: string;
+  description: string;
+  bc_status: 'ok' | 'nok' | '';
+  availability: Record<string, boolean>;
   brake_type: BrakeType;
   product_assist?: string;
   product_family?: string;
