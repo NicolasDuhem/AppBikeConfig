@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireApiRole } from '@/lib/api-auth';
-import { getFeatureFlags } from '@/lib/feature-flags';
+import { getFeatureFlags, IMPORT_CPQ_FLAG_KEY } from '@/lib/feature-flags';
 import { sql } from '@/lib/db';
 
 export async function GET() {
@@ -20,6 +20,10 @@ export async function PATCH(request: Request) {
   const enabled = !!body.enabled;
 
   if (!flagKey) return NextResponse.json({ error: 'flag_key is required' }, { status: 400 });
+
+  if (flagKey === IMPORT_CPQ_FLAG_KEY) {
+    return NextResponse.json({ error: 'import_csv_cpq is retired for CPQ-only runtime and can no longer be changed.' }, { status: 400 });
+  }
 
   const existing = await sql`select id, enabled from feature_flags where flag_key = ${flagKey} limit 1` as any[];
   if (!existing.length) return NextResponse.json({ error: 'Flag not found' }, { status: 404 });

@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react';
-import { useRouter } from 'next/navigation';
 import type { CpqCountry, CpqMatrixRow } from '@/lib/types';
 import AdminPageShell from '@/components/admin/admin-page-shell';
 import { canPreviewPicture, canShowPickPictureAction, hasLinkedPicture } from '@/lib/cpq-picture-picker';
@@ -72,7 +71,6 @@ function getFieldValue(row: MatrixClientRow, field: string): string {
 }
 
 export default function CpqMatrixPage() {
-  const router = useRouter();
   const [rows, setRows] = useState<MatrixClientRow[]>([]);
   const [countries, setCountries] = useState<CpqCountry[]>([]);
   const [rulesets, setRulesets] = useState<string[]>([]);
@@ -106,11 +104,6 @@ export default function CpqMatrixPage() {
   const load = useCallback(async () => {
     const [flagsRes, res, meRes] = await Promise.all([fetch('/api/feature-flags/public'), fetch('/api/cpq-matrix'), fetch('/api/me')]);
     const flags = await flagsRes.json();
-    if (!flags.import_csv_cpq) {
-      router.replace('/matrix');
-      return;
-    }
-
     const data = await res.json();
     const me = await meRes.json();
     const loadedRows = (data.rows || []).map((row: CpqMatrixRow) => ({ ...row, bc_status: normalizeBcStatus(row.bc_status), _clientKey: row.cpq_rule_id ? `id-${row.cpq_rule_id}` : `new-${crypto.randomUUID()}` }));
@@ -122,7 +115,7 @@ export default function CpqMatrixPage() {
     setIsPicturePickerEnabled(!!flags.cpq_bdam_picture_picker);
     setSelectedKeys(new Set());
     setDirtyKeys({});
-  }, [router]);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 

@@ -45,21 +45,24 @@ export default function FeatureFlagsClient() {
             <tr><th>Key</th><th>Name</th><th>Description</th><th>Enabled</th><th>Updated at</th><th>Updated by</th></tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr key={row.id}>
-                <td>{row.flag_key}</td>
-                <td>{row.flag_name}</td>
-                <td>{row.description}</td>
-                <td>
-                  <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    <input type="checkbox" checked={row.enabled} onChange={(e) => toggle(row, e.target.checked)} />
-                    {row.enabled ? 'Yes' : 'No'}
-                  </label>
-                </td>
-                <td>{row.updated_at ? new Date(row.updated_at).toLocaleString() : '-'}</td>
-                <td>{row.updated_by_email || '-'}</td>
-              </tr>
-            ))}
+            {rows.map((row) => {
+              const isRetiredRuntimeFlag = row.flag_key === 'import_csv_cpq';
+              return (
+                <tr key={row.id}>
+                  <td>{row.flag_key}</td>
+                  <td>{row.flag_name}</td>
+                  <td>{row.description}{isRetiredRuntimeFlag ? ' (retired runtime switch; kept for historical audit context only)' : ''}</td>
+                  <td>
+                    <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <input type="checkbox" checked={row.enabled} disabled={isRetiredRuntimeFlag} onChange={(e) => toggle(row, e.target.checked)} />
+                      {row.enabled ? 'Yes' : 'No'}
+                    </label>
+                  </td>
+                  <td>{row.updated_at ? new Date(row.updated_at).toLocaleString() : '-'}</td>
+                  <td>{row.updated_by_email || '-'}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
