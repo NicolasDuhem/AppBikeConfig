@@ -127,10 +127,10 @@ export async function POST(request: Request) {
 
   const rows = await sql`
     insert into cpq_import_rows (
-      import_run_id, row_number, option_name, choice_value, digit_position, code_value,
+      row_number, option_name, choice_value, digit_position, code_value,
       status, normalized_option_name, action_attempted, is_active, updated_by, source
     )
-    values (null, 0, ${optionName}, ${choiceValue}, ${digitPosition}, ${codeValue}, 'imported', ${optionName}, 'manual_sku_definition', true, ${auth.user.id}, 'sku_definition_ui')
+    values (0, ${optionName}, ${choiceValue}, ${digitPosition}, ${codeValue}, 'imported', ${optionName}, 'manual_sku_definition', true, ${auth.user.id}, 'sku_definition_ui')
     returning id, digit_position, option_name, code_value, choice_value, coalesce(is_active, true) as is_active, deactivated_at, deactivation_reason
   ` as any[];
 

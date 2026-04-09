@@ -8,7 +8,7 @@ Operational database truth for AppBikeConfig, reconciled against:
 - runtime SQL in `app/**` + `lib/**`
 - repository SQL in `sql/**` (explicitly non-authoritative when conflicting)
 
-Date reconciled: **April 8, 2026** (final `cpq_import_runs` retirement).
+Date reconciled: **April 9, 2026** (`import_run_id` residue cleanup + `sku_rules` retirement prep).
 
 ---
 
@@ -66,7 +66,7 @@ Table families:
 - `cpq_products.position29`, `cpq_products.position30` (**removed in prior run via migration 016; rollback SQL included in-file**)
 - `cpq_products.handlebar_type`, `speeds`, `mudguardsandrack`, `territory`, `mainframecolour`, `rearframecolour`, `frontcarrierblock`, `lighting`, `saddleheight`, `gearratio`, `saddle`, `tyre`, `brakes`, `pedals`, `saddlebag`, `suspension`, `biketype`, `toolkit`, `saddlelight`, `configcode`, `optionbox`, `framematerial`, `frameset`, `componentcolour`, `onbikeaccessories`, `handlebarstemcolour`, `handlebarpincolour`, `frontframecolour`, `frontforkcolour` (**removed in this run via migration 019 after cpq_products_flat fallback reduction; rollback SQL included in-file**).
 - Compatibility residue left in `cpq_products`: `description` (kept intentionally for a separate evidence-backed micro-batch).
-- `cpq_import_rows.import_run_id` and `cpq_products.import_run_id` are retained as staged nullable compatibility columns, but no longer carry FK coupling to `cpq_import_runs` (removed in migration `020`).
+- `cpq_import_rows.import_run_id` and `cpq_products.import_run_id` were dropped in migration `021_drop_import_run_id_residue.sql` (post-`cpq_import_runs` retirement).
 
 See full staged list in `docs/column-cleanup-candidates.md`.
 
@@ -106,14 +106,14 @@ Interpretation:
 
 ## 6) `sku_rules` decision
 
-Verdict: **Replace then remove next (staged)**.
+Verdict: **Retire next (staged), runtime-safe**.
 
 - Runtime no longer depends on `sku_rules`.
-- Migrations/seeds still reference it.
+- Remaining references are seed/bootstrap and migration-history only.
 - External dependency risk remains non-zero.
 
 Safe sequence:
-1. remove remaining seed/migration reliance,
+1. finish replacing remaining seed/migration reliance where practical,
 2. verify no external readers/writers,
 3. drop constraints/indexes/table in dedicated migration with rollback script.
 
@@ -124,12 +124,17 @@ Safe sequence:
 Decision implemented in this run:
 1. Remove `/api/cpq/generate` GET dependency on `cpq_import_runs` and `run_id`-driven lifecycle writes; GET now validates generation context from query params and reads active canonical rows directly from `cpq_import_rows`.
 2. Remove FK coupling from `cpq_import_rows.import_run_id` and `cpq_products.import_run_id`, then drop `cpq_import_runs` in migration `020_remove_cpq_import_runs.sql`.
-3. Keep `import_run_id` columns as staged nullable residue (no FK) for compatibility follow-up.
+3. Drop staged residue columns `cpq_import_rows.import_run_id` + `cpq_products.import_run_id` in migration `021_drop_import_run_id_residue.sql`.
+4. Add bootstrap prep migration `022_prepare_sku_rules_retirement_bootstrap.sql` to source `sku_digit_option_config` from active canonical `cpq_import_rows` rows.
 
 Deployment sequencing:
 1. Apply migration `020_remove_cpq_import_runs.sql` (drop FKs, then drop table).
-2. Deploy API code update for `/api/cpq/generate` GET query-param context flow.
+2. Apply migration `021_drop_import_run_id_residue.sql` (drop compatibility residue columns).
+3. Apply migration `022_prepare_sku_rules_retirement_bootstrap.sql` (bootstrap/config sync from canonical rows).
+4. Deploy API code update for `/api/cpq/push` + `/api/sku-rules` insert payloads without `import_run_id`.
 
 Rollback:
 - For migration `020`: use the rollback block inside `020_remove_cpq_import_runs.sql` to recreate `cpq_import_runs` and restore both foreign keys.
+- For migration `021`: use the rollback block inside `021_drop_import_run_id_residue.sql` to re-add `import_run_id` columns (nullable) plus index.
+- For migration `022`: no destructive data change; rollback is reverting the prep migration and restoring previous bootstrap derivation flow if needed.
 - GET behavior can be reverted by restoring prior route implementation if legacy `run_id` flow must be re-enabled.

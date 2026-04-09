@@ -1,8 +1,8 @@
-insert into sku_rules (digit_position, option_name, code_value, choice_value, description_element)
+insert into cpq_import_rows (row_number, option_name, choice_value, digit_position, code_value, status, normalized_option_name, action_attempted, source)
 values
-(1,'Handlebar','2','Medium','Handlebar'),
-(2,'Speed','4','4 speed','Speed'),
-(3,'Rack','R','R-Version','Rack')
+(1,'Handlebar','Medium',1,'2','imported','Handlebar','seed','seed'),
+(2,'Speed','4 speed',2,'4','imported','Speed','seed','seed'),
+(3,'Rack','R-Version',3,'R','imported','Rack','seed','seed')
 on conflict do nothing;
 
 insert into feature_flags (flag_key, flag_name, description, enabled)
@@ -59,8 +59,10 @@ on conflict do nothing;
 
 insert into sku_digit_option_config (digit_position, option_name, is_required, selection_mode, is_active)
 select distinct r.digit_position, r.option_name, false, 'multi', true
-from sku_rules r
-where r.digit_position between 1 and 30
+from cpq_import_rows r
+where r.status = 'imported'
+  and coalesce(r.is_active, true) = true
+  and r.digit_position between 1 and 30
 on conflict (digit_position) do update
 set option_name = excluded.option_name,
     updated_at = now();
