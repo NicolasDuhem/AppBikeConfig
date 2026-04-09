@@ -28,7 +28,8 @@ export default function AppNavigation() {
           { href: '/cpq-feature', label: 'Product - Create SKU' },
           { href: '/setup', label: 'Product - Setup', hidden: !permissionList.includes('setup.manage') },
           { href: '/users', label: 'Admin - Users' },
-          { href: '/feature-flags', label: 'Admin - Feature flag', hidden: !roleList.includes('sys_admin') && !permissionList.includes('feature_flags.manage') }
+          { href: '/feature-flags', label: 'Admin - Feature flag', hidden: !roleList.includes('sys_admin') && !permissionList.includes('feature_flags.manage') },
+          { href: '/admin/api-docs', label: 'Admin - API docs', hidden: !roleList.includes('sys_admin') }
         ]);
       })
       .catch(() => {});

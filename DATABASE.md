@@ -133,3 +133,14 @@ Rollback:
 - For migration `022`: no destructive data change; rollback is reverting the prep migration and restoring previous bootstrap derivation flow if needed.
 - GET behavior can be reverted by restoring prior route implementation if legacy `run_id` flow must be re-enabled.
 - For migration `023`: use the rollback block inside `023_drop_legacy_sku_rules.sql` to recreate `sku_rules` and its legacy indexes/constraint if rollback is required.
+
+---
+
+## 8) API docs and database/runtime alignment
+
+The admin API docs page (`/admin/api-docs`) is GET-only and route-derived from active runtime handlers.
+
+- It does not create new DB coupling.
+- It documents existing runtime responses that already read/write the CPQ/RBAC tables listed above.
+- Because endpoint discovery is dynamic from route files, docs stay aligned with active runtime surface as routes evolve.
+
