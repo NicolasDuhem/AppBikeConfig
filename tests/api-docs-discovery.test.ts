@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { discoverApiGetDocs } from '../lib/api-docs.ts';
 
-test('discoverApiGetDocs returns active GET routes and excludes internal auth route', async () => {
+test('discoverApiGetDocs returns curated GET docs with internal auth callback excluded', async () => {
   const docs = await discoverApiGetDocs();
   const included = docs.filter((doc) => doc.includeInAdminDocs).map((doc) => doc.path);
   const excluded = docs.filter((doc) => !doc.includeInAdminDocs).map((doc) => doc.path);
@@ -14,5 +14,6 @@ test('discoverApiGetDocs returns active GET routes and excludes internal auth ro
   assert.ok(excluded.includes('/api/auth/[...nextauth]'));
   assert.ok(!included.includes('/api/auth/[...nextauth]'));
 
+  assert.equal(docs.every((doc) => doc.method === 'GET'), true);
   assert.equal(included.every((path) => path.startsWith('/api/')), true);
 });

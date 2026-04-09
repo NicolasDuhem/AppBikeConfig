@@ -113,6 +113,6 @@ This run shipped the final `cpq_import_runs` removal change set:
 
 - Route: `/admin/api-docs` (sys_admin only).
 - The page documents **active GET API handlers only**.
-- Source of endpoint inventory is runtime route discovery from `app/api/**/route.ts`, with response/auth/query metadata enriched in `lib/api-docs.ts`.
+- Source of endpoint inventory is a curated static registry in `lib/api-docs.ts`; no runtime route discovery/glob/file scanning is used.
 - Non-GET handlers are intentionally excluded from this operational documentation surface.
 
