@@ -87,8 +87,8 @@ Operational cleanup planning now centers on:
 A dedicated sys_admin page is available at `/admin/api-docs`.
 
 - Purpose: internal API documentation for **GET endpoints only**.
-- Discovery: endpoints are discovered dynamically from active `app/api/**/route.ts` GET handlers.
-- Rendering: docs are built from `lib/api-docs.ts` (discovery + metadata enrichment).
+- Source: endpoints come from a curated static registry in `lib/api-docs.ts` (explicitly reviewed for current CPQ runtime/admin relevance).
+- Rendering: docs are built directly from registry metadata in `lib/api-docs.ts` (no runtime filesystem scanning).
 - Security: the page is visible in navigation only for `sys_admin`, and route access is enforced server-side.
 - Scope guard: POST/PUT/PATCH/DELETE methods are intentionally excluded.
 

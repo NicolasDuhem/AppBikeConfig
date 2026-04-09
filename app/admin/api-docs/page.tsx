@@ -20,7 +20,7 @@ export default async function AdminApiDocsPage() {
   return (
     <AdminPageShell title="Admin - API Docs" subtitle="Internal documentation for active GET endpoints (sys_admin only).">
       <div className="note compactNote">
-        Endpoints are discovered from <code>app/api/**/route.ts</code> GET handlers at runtime and rendered from a central registry in <code>lib/api-docs.ts</code>.
+        Endpoints are rendered from a curated static registry in <code>lib/api-docs.ts</code>; no runtime filesystem/source scanning is used.
       </div>
 
       <div className="apiDocsSummary">
