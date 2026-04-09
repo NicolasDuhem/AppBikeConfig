@@ -8,7 +8,7 @@ Operational database truth for AppBikeConfig, reconciled against:
 - runtime SQL in `app/**` + `lib/**`
 - repository SQL in `sql/**` (explicitly non-authoritative when conflicting)
 
-Date reconciled: **April 8, 2026** (cpq_products_flat fallback-reduction wave: remaining compatibility subset).
+Date reconciled: **April 8, 2026** (final `cpq_import_runs` retirement).
 
 ---
 
@@ -26,7 +26,7 @@ Table families:
 - RBAC/Auth/Audit: `app_users`, `roles`, `user_roles`, `permissions`, `role_permissions`, `role_permission_baselines_audit`, `user_permissions`, `audit_log`
 - CPQ canonical/config: `cpq_import_rows`, `cpq_import_row_translations`, `sku_digit_option_config`, `sku_generation_dependency_rules`
 - CPQ persistence/matrix: `cpq_products`, `cpq_product_attributes`, `cpq_sku_rules`, `cpq_availability`, `cpq_countries`, `cpq_product_assets`
-- Feature/ops: `feature_flags`, `feature_flag_audit`, `cpq_import_runs`
+- Feature/ops: `feature_flags`, `feature_flag_audit`
 - Legacy bridge: `sku_rules`
 
 ---
@@ -44,7 +44,6 @@ Table families:
 | `cpq_products`, `cpq_product_attributes` | Active + partially legacy payload | Push + normalized link | Keep table, prune columns |
 | `cpq_sku_rules`, `cpq_availability`, `cpq_countries` | Active | Matrix persistence | Keep |
 | `cpq_product_assets` | Active (feature-flag path) | Optional picture flow | Keep |
-| `cpq_import_runs` | Diagnostics/lifecycle residue | `/api/cpq/generate` GET explicit generation-context read + lifecycle updates | Keep for one final staged replacement, then retire |
 | `sku_rules` | Cleanup candidate | No runtime API usage | Replace then drop |
 
 ---
@@ -67,7 +66,7 @@ Table families:
 - `cpq_products.position29`, `cpq_products.position30` (**removed in prior run via migration 016; rollback SQL included in-file**)
 - `cpq_products.handlebar_type`, `speeds`, `mudguardsandrack`, `territory`, `mainframecolour`, `rearframecolour`, `frontcarrierblock`, `lighting`, `saddleheight`, `gearratio`, `saddle`, `tyre`, `brakes`, `pedals`, `saddlebag`, `suspension`, `biketype`, `toolkit`, `saddlelight`, `configcode`, `optionbox`, `framematerial`, `frameset`, `componentcolour`, `onbikeaccessories`, `handlebarstemcolour`, `handlebarpincolour`, `frontframecolour`, `frontforkcolour` (**removed in this run via migration 019 after cpq_products_flat fallback reduction; rollback SQL included in-file**).
 - Compatibility residue left in `cpq_products`: `description` (kept intentionally for a separate evidence-backed micro-batch).
-- `cpq_import_runs` is now narrowed to explicit generation-context read + lifecycle writes in `/api/cpq/generate` GET; row counters/upload ownership fields remain non-runtime residue.
+- `cpq_import_rows.import_run_id` and `cpq_products.import_run_id` are retained as staged nullable compatibility columns, but no longer carry FK coupling to `cpq_import_runs` (removed in migration `020`).
 
 See full staged list in `docs/column-cleanup-candidates.md`.
 
@@ -95,7 +94,7 @@ See `docs/constraint-cleanup-candidates.md`.
 `sql/schema.sql` is incomplete versus CSV-truth DB.
 
 Tables present in CSV but missing from baseline schema SQL:
-- `app_users`, `audit_log`, `cpq_import_rows`, `cpq_import_row_translations`, `cpq_import_runs`, `cpq_products`, `cpq_product_attributes`, `cpq_product_assets`, `feature_flags`, `feature_flag_audit`, `roles`, `user_roles`.
+- `app_users`, `audit_log`, `cpq_import_rows`, `cpq_import_row_translations`, `cpq_products`, `cpq_product_attributes`, `cpq_product_assets`, `feature_flags`, `feature_flag_audit`, `roles`, `user_roles`.
 
 `role_permission_baselines_audit` is now part of supported DB truth, aligned across runtime, migrations, and CSV inventories.
 
@@ -123,14 +122,14 @@ Safe sequence:
 ## 7) Migration decision and deployment/rollback posture
 
 Decision implemented in this run:
-1. **Keep (one step)** `cpq_import_runs` as diagnostics/lifecycle residue; `/api/cpq/generate` GET still reads explicit generation-context metadata and writes lifecycle state in this table.
-2. Remove the remaining `cpq_products_flat` fallback dependency for compatibility attributes and drop matched `cpq_products` columns in migration `019_cpq_products_flat_remove_remaining_fallback.sql`.
-3. Prior wave removals remain in place (`016` position placeholders, `017` brake compatibility columns, `018` product identity columns).
+1. Remove `/api/cpq/generate` GET dependency on `cpq_import_runs` and `run_id`-driven lifecycle writes; GET now validates generation context from query params and reads active canonical rows directly from `cpq_import_rows`.
+2. Remove FK coupling from `cpq_import_rows.import_run_id` and `cpq_products.import_run_id`, then drop `cpq_import_runs` in migration `020_remove_cpq_import_runs.sql`.
+3. Keep `import_run_id` columns as staged nullable residue (no FK) for compatibility follow-up.
 
 Deployment sequencing:
-1. Apply migration `019_cpq_products_flat_remove_remaining_fallback.sql` (view fallback reduction + column drops).
-2. Prior migrations `016`-`018` remain part of baseline sequence; no runtime code deployment required in this wave.
+1. Apply migration `020_remove_cpq_import_runs.sql` (drop FKs, then drop table).
+2. Deploy API code update for `/api/cpq/generate` GET query-param context flow.
 
 Rollback:
-- For migration `019`: run additive `alter table ... add column` statements and the rollback `create or replace view cpq_products_flat` block documented directly inside migration `019` to restore dropped columns + fallback behavior.
-- For prior migrations `017`/`018`: use in-file additive rollback SQL if restoration is required.
+- For migration `020`: use the rollback block inside `020_remove_cpq_import_runs.sql` to recreate `cpq_import_runs` and restore both foreign keys.
+- GET behavior can be reverted by restoring prior route implementation if legacy `run_id` flow must be re-enabled.

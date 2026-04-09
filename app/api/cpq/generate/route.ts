@@ -15,20 +15,14 @@ type SelectedDigitChoice = {
 
 type DigitConfig = { digit_position: number; option_name: string; is_required: boolean; selection_mode: 'single' | 'multi' };
 type DependencyRule = { source_digit_position: number; target_digit_position: number; rule_type: 'match_code'; active: boolean; sort_order: number };
-type ImportRunGenerationContext = {
-  id: number;
-  file_name: string;
-  selected_line: string;
-  electric_type: string;
-  is_special: boolean;
-  special_edition_name: string | null;
-  character_17: string;
-  status: string;
-  current_phase: string | null;
-  error_message: string | null;
-  error_stack: string | null;
-  failed_at: string | null;
-  completed_at: string | null;
+
+type GenerationContext = {
+  fileName: string;
+  selectedLine: CpqMetadata['selectedLine'];
+  electricType: CpqMetadata['electricType'];
+  isSpecial: boolean;
+  specialEditionName?: string;
+  character17: string;
 };
 
 function isSelectedLine(value: string): value is CpqMetadata['selectedLine'] {
@@ -47,6 +41,49 @@ function isElectricType(value: string): value is CpqMetadata['electricType'] {
 function parseElectricType(value: unknown): CpqMetadata['electricType'] | null {
   if (typeof value !== 'string') return null;
   return isElectricType(value) ? value : null;
+}
+
+function parseIsSpecial(value: unknown): boolean {
+  if (typeof value === 'boolean') return value;
+  if (typeof value !== 'string') return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === 'true' || normalized === '1' || normalized === 'yes';
+}
+
+function parseCharacter17(value: unknown): string {
+  const normalized = String(value ?? '').trim().toUpperCase();
+  return normalizeCharacter17(normalized || 'A');
+}
+
+function parseGenerationContext(searchParams: URLSearchParams): { context: GenerationContext | null; error?: string } {
+  const selectedLineRaw = searchParams.get('selected_line');
+  const electricTypeRaw = searchParams.get('electric_type');
+  if (!selectedLineRaw || !electricTypeRaw) {
+    return { context: null, error: 'selected_line and electric_type are required' };
+  }
+
+  const selectedLine = parseSelectedLine(selectedLineRaw);
+  if (!selectedLine) return { context: null, error: `Invalid selected_line value: ${selectedLineRaw}` };
+
+  const electricType = parseElectricType(electricTypeRaw);
+  if (!electricType) return { context: null, error: `Invalid electric_type value: ${electricTypeRaw}` };
+
+  const isSpecial = parseIsSpecial(searchParams.get('is_special'));
+  const specialEditionNameRaw = (searchParams.get('special_edition_name') || '').trim();
+  const specialEditionName = specialEditionNameRaw || undefined;
+  const character17 = parseCharacter17(searchParams.get('character_17'));
+  const fileName = (searchParams.get('file_name') || '').trim() || 'cpq-generate';
+
+  return {
+    context: {
+      fileName,
+      selectedLine,
+      electricType,
+      isSpecial,
+      specialEditionName,
+      character17
+    }
+  };
 }
 
 function buildRowsFromSelectedChoices(payload: any, digitConfigs: DigitConfig[], dependencyRules: DependencyRule[]) {
@@ -197,58 +234,19 @@ export async function POST(request: Request) {
 }
 
 export async function GET(request: Request) {
-  let runId = 0;
   try {
     const auth = await requireApiRole('builder.use');
     if (auth instanceof NextResponse) return auth;
 
     const { searchParams } = new URL(request.url);
-    runId = Number(searchParams.get('run_id') || 0);
-    if (!runId) return NextResponse.json({ success: false, phase: 'generation_validation', error: 'run_id is required' }, { status: 400 });
-
-    await trackLegacyPathInvocation({ pathKey: LEGACY_PATH_KEYS.cpqImportRunsGenerateGet, route: '/api/cpq/generate', method: 'GET', userId: auth.user.id, details: { runId } });
-
-    const runRows = await sql`
-      select
-        id,
-        file_name,
-        selected_line,
-        electric_type,
-        is_special,
-        special_edition_name,
-        character_17,
-        status,
-        current_phase,
-        error_message,
-        error_stack,
-        failed_at,
-        completed_at
-      from cpq_import_runs
-      where id = ${runId}
-      limit 1
-    ` as ImportRunGenerationContext[];
-    if (!runRows.length) return NextResponse.json({ success: false, phase: 'generation_validation', error: 'Import run not found' }, { status: 404 });
-    const run = runRows[0];
-
-    await sql`update cpq_import_runs set current_phase = 'generating_combinations', error_message = null, error_stack = null where id = ${runId}`;
-
-    const importRows = await sql`
-      select row_number, digit_position, option_name, code_value, status, action_attempted
-      from cpq_import_rows
-      where import_run_id = ${runId}
-        and (
-          status = 'imported'
-          or (status = 'skipped' and action_attempted = 'skip_duplicate')
-        )
-      order by row_number
-    ` as Array<{ row_number: number; digit_position: number; option_name: string; code_value: string; status: string; action_attempted: string | null }>;
-
-    if (!importRows.length) {
-      return NextResponse.json({ success: false, phase: 'generation_validation', error: 'No valid normalized rows were available for generation' }, { status: 400 });
+    const parsedContext = parseGenerationContext(searchParams);
+    if (!parsedContext.context) {
+      return NextResponse.json({ success: false, phase: 'generation_validation', error: parsedContext.error || 'Missing generation context' }, { status: 400 });
     }
 
-    const scopedKeySet = new Set(importRows.map((row) => `${Number(row.digit_position)}|${String(row.code_value || (Number(row.digit_position) === 0 ? '-' : '')).toUpperCase()}|${String(mapOptionNameToCanonical(row.option_name) || row.option_name).toLowerCase()}`));
-    const canonicalRows = await sql`
+    await trackLegacyPathInvocation({ pathKey: LEGACY_PATH_KEYS.cpqImportRunsGenerateGet, route: '/api/cpq/generate', method: 'GET', userId: auth.user.id, details: { contextSource: 'query_params' } });
+
+    const scopedRules = await sql`
       select id, digit_position, option_name, code_value, choice_value,
              null::text as description_element,
              coalesce(is_active, true) as is_active,
@@ -257,59 +255,24 @@ export async function GET(request: Request) {
       from cpq_import_rows
       where status = 'imported'
         and coalesce(is_active, true) = true
-      order by id desc
+      order by digit_position asc nulls last, code_value asc, id desc
     ` as any[];
 
-    const scopedRulesByKey = new Map<string, any>();
-    for (const row of canonicalRows) {
-      const canonicalOption = mapOptionNameToCanonical(row.option_name) || row.option_name;
-      const scopedKey = `${Number(row.digit_position)}|${String(row.code_value || '').toUpperCase()}|${String(canonicalOption).toLowerCase()}`;
-      if (!scopedKeySet.has(scopedKey)) continue;
-      if (!scopedRulesByKey.has(scopedKey)) scopedRulesByKey.set(scopedKey, { ...row, option_name: canonicalOption });
+    if (!scopedRules.length) {
+      return NextResponse.json({ success: false, phase: 'generation_validation', error: 'No active canonical rows were available for generation' }, { status: 400 });
     }
 
-    const scopedRules = Array.from(scopedRulesByKey.values()).sort((a, b) => Number(a.digit_position) - Number(b.digit_position) || String(a.code_value).localeCompare(String(b.code_value)));
-    const selectedLine = parseSelectedLine(run.selected_line);
-    if (!selectedLine) {
-      return NextResponse.json({ success: false, phase: 'generation_validation', error: `Invalid selected_line value: ${run.selected_line}` }, { status: 400 });
-    }
-    const electricType = parseElectricType(run.electric_type);
-    if (!electricType) {
-      return NextResponse.json({ success: false, phase: 'generation_validation', error: `Invalid electric_type value: ${run.electric_type}` }, { status: 400 });
-    }
-    const { rows, diagnostics } = buildCpqCombinationsDetailed(scopedRules, {
-      selectedLine,
-      electricType,
-      isSpecial: run.is_special,
-      specialEditionName: run.special_edition_name || undefined,
-      character17: run.character_17,
-      fileName: run.file_name
+    const { rows, diagnostics } = buildCpqCombinationsDetailed(scopedRules, parsedContext.context);
+
+    return NextResponse.json({
+      success: true,
+      phase: 'generation_completed',
+      generationContext: parsedContext.context,
+      rows,
+      diagnostics
     });
-
-    await sql`
-      update cpq_import_runs
-      set current_phase = 'generation_completed',
-          status = 'completed',
-          error_message = null,
-          error_stack = null,
-          completed_at = now()
-      where id = ${runId}
-    `;
-
-    return NextResponse.json({ success: true, phase: 'generation_completed', run, rows, diagnostics });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unexpected generation error';
-    if (runId) {
-      await sql`
-        update cpq_import_runs
-        set current_phase = 'generation_failed',
-            status = 'failed',
-            error_message = ${message},
-            error_stack = ${error instanceof Error ? error.stack : null},
-            failed_at = now()
-        where id = ${runId}
-      `;
-    }
     return NextResponse.json({ success: false, phase: 'generation_failed', error: message }, { status: 500 });
   }
 }
