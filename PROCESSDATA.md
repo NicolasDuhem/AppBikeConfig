@@ -4,7 +4,7 @@
 
 Detailed operational process/data map for AppBikeConfig CPQ runtime, reconciled with CSV database truth.
 
-Date reconciled: **April 8, 2026** (cpq_products_flat fallback-reduction wave: remaining compatibility subset).
+Date reconciled: **April 8, 2026** (final `cpq_import_runs` retirement).
 
 ---
 
@@ -55,11 +55,9 @@ Date reconciled: **April 8, 2026** (cpq_products_flat fallback-reduction wave: r
 ## 2.5 Generation + diagnostics
 
 - Endpoint: `/api/cpq/generate`
-- Active flow reads canonical/config tables.
-- Transitional diagnostics still depend on `cpq_import_runs`:
-  - GET reads only generation-context + diagnostics columns (`id`, `file_name`, `selected_line`, `electric_type`, `is_special`, `special_edition_name`, `character_17`, `status`, `current_phase`, `error_message`, `error_stack`, `failed_at`, `completed_at`).
-  - GET updates lifecycle fields (`current_phase`, `status`, `error_message`, `error_stack`, `completed_at`, `failed_at`).
-- No runtime insert path currently exists in-repo for `cpq_import_runs`; treat this as transitional and keep until run-creation replacement is explicit.
+- Active flow reads canonical/config tables only.
+- GET now requires generation context from query params (`selected_line`, `electric_type`) and accepts optional context params (`is_special`, `special_edition_name`, `character_17`, `file_name`).
+- GET reads active canonical rows directly from `cpq_import_rows` and no longer reads/writes `cpq_import_runs` lifecycle metadata or requires `run_id`.
 
 ## 2.6 Push + matrix operations
 
@@ -90,17 +88,18 @@ Date reconciled: **April 8, 2026** (cpq_products_flat fallback-reduction wave: r
 
 ## Needs staged verification
 - `cpq_products` remaining denormalized payload column pruning (small dependency-checked batches).
-- `cpq_import_runs` final retirement: remaining dependency is the `/api/cpq/generate` GET diagnostics lifecycle and generation-context metadata read.
+- `cpq_import_runs` has been retired and dropped in migration `020`; no runtime API table dependency remains.
 - Full `sku_rules` retirement.
 
 ## Resolved in this run
 - Completed final `cpq_products` fallback-coupled cleanup wave by removing `cpq_products_flat` fallback for the remaining compatibility subset and dropping the matched legacy columns in migration `019`.
-- `cpq_import_runs` dependency narrowed: generation endpoint no longer performs `select *`; it now reads only explicit generation-context + diagnostics columns.
+- Removed `cpq_import_runs` dependency entirely from `/api/cpq/generate` GET and dropped FK coupling from `cpq_import_rows.import_run_id` + `cpq_products.import_run_id`.
 
 ---
 
 ## 5) Next operationally-safe action
 
-This run shipped one paired fallback-reduction/drop change and one sequencing decision:
-1. Remove remaining `cpq_products_flat` fallback for compatibility attributes (`HandlebarType` through `FrontForkColour`), then drop matched `cpq_products` columns in migration `019_cpq_products_flat_remove_remaining_fallback.sql`.
-2. Keep `cpq_import_runs` intact for now, but treat it as diagnostics/lifecycle residue; next run should execute final table retirement only after replacing GET run metadata/lifecycle ownership.
+This run shipped the final `cpq_import_runs` removal change set:
+1. `/api/cpq/generate` GET moved to query-param generation context and canonical-row reads (no `run_id`, no lifecycle writes).
+2. Migration `020_remove_cpq_import_runs.sql` removed FK coupling on `cpq_import_rows.import_run_id` + `cpq_products.import_run_id`, then dropped `cpq_import_runs`.
+3. `import_run_id` columns remain staged (nullable, no FK) for a small optional follow-up cleanup.
