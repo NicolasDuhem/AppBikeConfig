@@ -26,7 +26,6 @@ export async function POST(request: Request) {
   const body = await request.json();
   const rows = Array.isArray(body.rows) ? body.rows : [];
   const brakeMode = String(body.brakeMode || '');
-  const runId = Number(body.runId || 0);
 
   if (!rows.length) return NextResponse.json({ error: 'No selected rows to push' }, { status: 400 });
   if (!['reverse', 'non_reverse'].includes(brakeMode)) return NextResponse.json({ error: 'brakeMode is required' }, { status: 400 });
@@ -62,13 +61,11 @@ export async function POST(request: Request) {
 
     const cpqProductInsert = await sql`
       insert into cpq_products (
-        import_run_id,
         cpq_ruleset,
         sku_code,
         created_by
       )
       values (
-        ${runId || null},
         ${cpqRuleset},
         ${skuCode},
         ${auth.user.id}
@@ -109,7 +106,6 @@ export async function POST(request: Request) {
         } else {
           const insertedImportRow = await sql`
             insert into cpq_import_rows (
-              import_run_id,
               row_number,
               option_name,
               choice_value,
@@ -120,7 +116,6 @@ export async function POST(request: Request) {
               action_attempted
             )
             values (
-              ${runId || null},
               0,
               ${attribute.optionName},
               ${attribute.value},

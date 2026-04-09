@@ -4,7 +4,7 @@
 
 Detailed operational process/data map for AppBikeConfig CPQ runtime, reconciled with CSV database truth.
 
-Date reconciled: **April 8, 2026** (final `cpq_import_runs` retirement).
+Date reconciled: **April 9, 2026** (`import_run_id` residue cleanup + `sku_rules` retirement prep).
 
 ---
 
@@ -72,7 +72,7 @@ Date reconciled: **April 8, 2026** (final `cpq_import_runs` retirement).
 ## 3) Legacy vs active runtime distinction
 
 - `sku_rules` exists physically but is not queried by runtime APIs.
-- It remains in migration/seed history as a legacy bridge.
+- It now appears only in migration/seed history plus legacy bootstrap residue.
 - Runtime canonical truth is `cpq_import_rows`.
 
 ---
@@ -89,6 +89,7 @@ Date reconciled: **April 8, 2026** (final `cpq_import_runs` retirement).
 ## Needs staged verification
 - `cpq_products` remaining denormalized payload column pruning (small dependency-checked batches).
 - `cpq_import_runs` has been retired and dropped in migration `020`; no runtime API table dependency remains.
+- Staged residue columns `cpq_import_rows.import_run_id` + `cpq_products.import_run_id` were removed in migration `021`.
 - Full `sku_rules` retirement.
 
 ## Resolved in this run
@@ -102,4 +103,5 @@ Date reconciled: **April 8, 2026** (final `cpq_import_runs` retirement).
 This run shipped the final `cpq_import_runs` removal change set:
 1. `/api/cpq/generate` GET moved to query-param generation context and canonical-row reads (no `run_id`, no lifecycle writes).
 2. Migration `020_remove_cpq_import_runs.sql` removed FK coupling on `cpq_import_rows.import_run_id` + `cpq_products.import_run_id`, then dropped `cpq_import_runs`.
-3. `import_run_id` columns remain staged (nullable, no FK) for a small optional follow-up cleanup.
+3. Migration `021_drop_import_run_id_residue.sql` removed staged residue columns `cpq_import_rows.import_run_id` + `cpq_products.import_run_id`.
+4. Migration `022_prepare_sku_rules_retirement_bootstrap.sql` now derives `sku_digit_option_config` from canonical active `cpq_import_rows` rows (not legacy `sku_rules`).
