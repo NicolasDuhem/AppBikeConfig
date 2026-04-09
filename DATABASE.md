@@ -8,7 +8,7 @@ Operational database truth for AppBikeConfig, reconciled against:
 - runtime SQL in `app/**` + `lib/**`
 - repository SQL in `sql/**` (explicitly non-authoritative when conflicting)
 
-Date reconciled: **April 9, 2026** (`import_run_id` residue cleanup + `sku_rules` retirement prep).
+Date reconciled: **April 9, 2026** (`import_run_id` residue cleanup + final `sku_rules` removal).
 
 ---
 
@@ -27,7 +27,6 @@ Table families:
 - CPQ canonical/config: `cpq_import_rows`, `cpq_import_row_translations`, `sku_digit_option_config`, `sku_generation_dependency_rules`
 - CPQ persistence/matrix: `cpq_products`, `cpq_product_attributes`, `cpq_sku_rules`, `cpq_availability`, `cpq_countries`, `cpq_product_assets`
 - Feature/ops: `feature_flags`, `feature_flag_audit`
-- Legacy bridge: `sku_rules`
 
 ---
 
@@ -44,7 +43,6 @@ Table families:
 | `cpq_products`, `cpq_product_attributes` | Active + partially legacy payload | Push + normalized link | Keep table, prune columns |
 | `cpq_sku_rules`, `cpq_availability`, `cpq_countries` | Active | Matrix persistence | Keep |
 | `cpq_product_assets` | Active (feature-flag path) | Optional picture flow | Keep |
-| `sku_rules` | Cleanup candidate | No runtime API usage | Replace then drop |
 
 ---
 
@@ -82,7 +80,7 @@ See full staged list in `docs/column-cleanup-candidates.md`.
 
 ## Cleanup candidates
 
-- `sku_rules` constraints + indexes (only as part of table retirement stage).
+- Legacy `sku_rules` constraints/indexes/table are retired in migration `023_drop_legacy_sku_rules.sql`.
 - Potentially redundant NOT NULL check-export entries after explicit validation.
 
 See `docs/constraint-cleanup-candidates.md`.
@@ -106,18 +104,12 @@ Interpretation:
 
 ## 6) `sku_rules` decision
 
-Verdict: **Retire next (staged), runtime-safe**.
+Verdict: **Retired in this run (runtime-safe).**
 
-- Runtime no longer depends on `sku_rules`.
-- Remaining references are seed/bootstrap and migration-history only.
-- External dependency risk remains non-zero.
+- Runtime does not depend on `sku_rules`.
+- Current setup/bootstrap seed flow does not depend on `sku_rules`.
+- `sku_rules` now remains only in historical migration SQL and historical docs.
 
-Safe sequence:
-1. finish replacing remaining seed/migration reliance where practical,
-2. verify no external readers/writers,
-3. drop constraints/indexes/table in dedicated migration with rollback script.
-
----
 
 ## 7) Migration decision and deployment/rollback posture
 
@@ -126,15 +118,18 @@ Decision implemented in this run:
 2. Remove FK coupling from `cpq_import_rows.import_run_id` and `cpq_products.import_run_id`, then drop `cpq_import_runs` in migration `020_remove_cpq_import_runs.sql`.
 3. Drop staged residue columns `cpq_import_rows.import_run_id` + `cpq_products.import_run_id` in migration `021_drop_import_run_id_residue.sql`.
 4. Add bootstrap prep migration `022_prepare_sku_rules_retirement_bootstrap.sql` to source `sku_digit_option_config` from active canonical `cpq_import_rows` rows.
+5. Drop retired legacy table/indexes/constraints in migration `023_drop_legacy_sku_rules.sql`.
 
 Deployment sequencing:
 1. Apply migration `020_remove_cpq_import_runs.sql` (drop FKs, then drop table).
 2. Apply migration `021_drop_import_run_id_residue.sql` (drop compatibility residue columns).
 3. Apply migration `022_prepare_sku_rules_retirement_bootstrap.sql` (bootstrap/config sync from canonical rows).
 4. Deploy API code update for `/api/cpq/push` + `/api/sku-rules` insert payloads without `import_run_id`.
+5. Apply migration `023_drop_legacy_sku_rules.sql` (drop legacy `sku_rules` + table-only indexes/constraints).
 
 Rollback:
 - For migration `020`: use the rollback block inside `020_remove_cpq_import_runs.sql` to recreate `cpq_import_runs` and restore both foreign keys.
 - For migration `021`: use the rollback block inside `021_drop_import_run_id_residue.sql` to re-add `import_run_id` columns (nullable) plus index.
 - For migration `022`: no destructive data change; rollback is reverting the prep migration and restoring previous bootstrap derivation flow if needed.
 - GET behavior can be reverted by restoring prior route implementation if legacy `run_id` flow must be re-enabled.
+- For migration `023`: use the rollback block inside `023_drop_legacy_sku_rules.sql` to recreate `sku_rules` and its legacy indexes/constraint if rollback is required.

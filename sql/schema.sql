@@ -1,26 +1,3 @@
-create table if not exists sku_rules (
-  id bigserial primary key,
-  digit_position integer not null,
-  option_name text not null,
-  code_value text not null check (((digit_position = 0 and code_value = '-')) or ((digit_position > 0 and code_value ~ '^[A-Z0-9]$'))),
-  choice_value text not null,
-  description_element text,
-  is_active boolean not null default true,
-  deactivated_at timestamptz,
-  deactivation_reason text
-);
-
-create unique index if not exists sku_rules_active_digit_code_nonzero_uniq
-  on sku_rules (digit_position, upper(code_value))
-  where is_active = true and digit_position > 0;
-
-create unique index if not exists sku_rules_active_static_option_code_uniq
-  on sku_rules (lower(option_name), upper(code_value))
-  where is_active = true and digit_position = 0;
-
-create index if not exists sku_rules_active_lookup_idx
-  on sku_rules (is_active, option_name, digit_position);
-
 create table if not exists cpq_countries (
   id bigserial primary key,
   country text not null unique,
