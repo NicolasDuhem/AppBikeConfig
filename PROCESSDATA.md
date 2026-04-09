@@ -106,3 +106,13 @@ This run shipped the final `cpq_import_runs` removal change set:
 3. Migration `021_drop_import_run_id_residue.sql` removed staged residue columns `cpq_import_rows.import_run_id` + `cpq_products.import_run_id`.
 4. Migration `022_prepare_sku_rules_retirement_bootstrap.sql` now derives `sku_digit_option_config` from canonical active `cpq_import_rows` rows (not legacy `sku_rules`).
 5. Migration `023_drop_legacy_sku_rules.sql` drops retired `sku_rules` table plus table-only indexes/constraints with explicit rollback SQL in-file.
+
+---
+
+## 6) Admin API docs process note
+
+- Route: `/admin/api-docs` (sys_admin only).
+- The page documents **active GET API handlers only**.
+- Source of endpoint inventory is runtime route discovery from `app/api/**/route.ts`, with response/auth/query metadata enriched in `lib/api-docs.ts`.
+- Non-GET handlers are intentionally excluded from this operational documentation surface.
+
