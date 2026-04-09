@@ -12,7 +12,6 @@ export default function AppNavigation() {
     { href: '/cpq-matrix', label: 'Sales - SKU vs Country' },
     { href: '/sku-definition', label: 'Product - SKU definition' },
     { href: '/cpq-feature', label: 'Product - Create SKU' },
-    { href: '/cpq', label: 'Product - CPQ' },
     { href: '/users', label: 'Admin - Users' }
   ]);
 
@@ -27,7 +26,6 @@ export default function AppNavigation() {
           { href: '/cpq-matrix', label: 'Sales - SKU vs Country' },
           { href: '/sku-definition', label: 'Product - SKU definition' },
           { href: '/cpq-feature', label: 'Product - Create SKU' },
-          { href: '/cpq', label: 'Product - CPQ', hidden: !permissionList.includes('builder.use') },
           { href: '/setup', label: 'Product - Setup', hidden: !permissionList.includes('setup.manage') },
           { href: '/users', label: 'Admin - Users' },
           { href: '/feature-flags', label: 'Admin - Feature flag', hidden: !roleList.includes('sys_admin') && !permissionList.includes('feature_flags.manage') },
