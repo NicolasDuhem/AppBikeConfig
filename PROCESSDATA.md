@@ -4,7 +4,7 @@
 
 Detailed operational process/data map for AppBikeConfig CPQ runtime, reconciled with CSV database truth.
 
-Date reconciled: **April 9, 2026** (`import_run_id` residue cleanup + `sku_rules` retirement prep).
+Date reconciled: **April 9, 2026** (`import_run_id` residue cleanup + final `sku_rules` removal).
 
 ---
 
@@ -71,9 +71,9 @@ Date reconciled: **April 9, 2026** (`import_run_id` residue cleanup + `sku_rules
 
 ## 3) Legacy vs active runtime distinction
 
-- `sku_rules` exists physically but is not queried by runtime APIs.
-- It now appears only in migration/seed history plus legacy bootstrap residue.
-- Runtime canonical truth is `cpq_import_rows`.
+- `sku_rules` is removed from supported current schema via migration `023_drop_legacy_sku_rules.sql`.
+- Historical references remain only in legacy migrations/docs for audit trail.
+- Runtime canonical truth remains `cpq_import_rows`.
 
 ---
 
@@ -90,7 +90,7 @@ Date reconciled: **April 9, 2026** (`import_run_id` residue cleanup + `sku_rules
 - `cpq_products` remaining denormalized payload column pruning (small dependency-checked batches).
 - `cpq_import_runs` has been retired and dropped in migration `020`; no runtime API table dependency remains.
 - Staged residue columns `cpq_import_rows.import_run_id` + `cpq_products.import_run_id` were removed in migration `021`.
-- Full `sku_rules` retirement.
+- `sku_rules` retirement is complete in migration `023_drop_legacy_sku_rules.sql`.
 
 ## Resolved in this run
 - Completed final `cpq_products` fallback-coupled cleanup wave by removing `cpq_products_flat` fallback for the remaining compatibility subset and dropping the matched legacy columns in migration `019`.
@@ -105,3 +105,4 @@ This run shipped the final `cpq_import_runs` removal change set:
 2. Migration `020_remove_cpq_import_runs.sql` removed FK coupling on `cpq_import_rows.import_run_id` + `cpq_products.import_run_id`, then dropped `cpq_import_runs`.
 3. Migration `021_drop_import_run_id_residue.sql` removed staged residue columns `cpq_import_rows.import_run_id` + `cpq_products.import_run_id`.
 4. Migration `022_prepare_sku_rules_retirement_bootstrap.sql` now derives `sku_digit_option_config` from canonical active `cpq_import_rows` rows (not legacy `sku_rules`).
+5. Migration `023_drop_legacy_sku_rules.sql` drops retired `sku_rules` table plus table-only indexes/constraints with explicit rollback SQL in-file.

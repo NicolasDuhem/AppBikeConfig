@@ -1,6 +1,6 @@
 # Database cleanup master plan (CSV truth reconciliation)
 
-Date: **April 9, 2026** (`import_run_id` residue cleanup + `sku_rules` retirement prep).
+Date: **April 9, 2026** (`import_run_id` residue cleanup + final `sku_rules` removal).
 Primary truth inputs: `database schema.csv` and `database constraints.csv`.
 
 ## 1) Reconciliation scope and method
@@ -32,7 +32,6 @@ Main table families:
 - CPQ canonical/config: `cpq_import_rows`, `cpq_import_row_translations`, `sku_digit_option_config`, `sku_generation_dependency_rules`
 - CPQ persistence/matrix: `cpq_products`, `cpq_product_attributes`, `cpq_sku_rules`, `cpq_availability`, `cpq_countries`, `cpq_product_assets`
 - Feature flags/ops: `feature_flags`, `feature_flag_audit`
-- Legacy bridge: `sku_rules`
 
 ## 3) Critical repo SQL mismatches
 
@@ -73,7 +72,6 @@ Risk class: previously high; now mitigated by explicit schema support.
 | `cpq_products`, `cpq_product_attributes` | Active / partially normalized | Active write path; many legacy columns still present | Medium | Keep table, clean columns |
 | `cpq_sku_rules`, `cpq_availability`, `cpq_countries` | Active | Active matrix runtime | Very high | Keep |
 | `cpq_product_assets` | Active (feature-flag path) | Active write when enabled | Medium | Keep |
-| `sku_rules` | Cleanup candidate (legacy) | Not used by runtime; seed/migration bridge only | Medium-high external dependency risk | Replace/remove in staged migration |
 
 ## 5) Column-level reconciliation (high value cleanup list)
 
@@ -138,20 +136,19 @@ Risk class: previously high; now mitigated by explicit schema support.
 
 ## 6.2 Legacy-only / cleanup candidates
 
-- All constraints on `sku_rules` after dependency verification window.
+- `sku_rules` constraints/indexes are retired via migration `023_drop_legacy_sku_rules.sql`.
 - Potentially redundant NOT NULL-exported CHECK rows for columns that are operationally optional in transitional flows (validate before drop).
 
 ## 7) Known legacy focus verdicts
 
 ## 7.1 `sku_rules` verdict
 
-**Decision: replace then remove (next staged target), not immediate hard-drop.**
+**Decision: retired in this run via dedicated drop migration.**
 
 Reasoning:
 - No runtime API path queries `sku_rules`.
-- It remains in seed/migration history and may still be referenced by out-of-band scripts/environments.
-- Bootstrap/setup prep now exists: migration `022` and `sql/seed.sql` derive `sku_digit_option_config` from canonical `cpq_import_rows`, reducing direct bootstrap coupling to `sku_rules`.
-- Safe staged plan is feasible and lower risk than indefinite retention.
+- Bootstrap/setup derivation already moved to canonical `cpq_import_rows` (`022` + `sql/seed.sql`).
+- Migration `023_drop_legacy_sku_rules.sql` now drops `sku_rules` and table-specific indexes/constraints with explicit rollback SQL in-file.
 
 ## 7.2 Setup/config tables
 
@@ -161,7 +158,7 @@ Reasoning:
 ## 7.3 CPQ tables
 
 - CPQ core is actively used; table removal is out-of-scope.
-- Highest remaining value cleanup is final `sku_rules` retirement once bootstrap/migration residue is fully retired.
+- `sku_rules` retirement is now complete; remaining references are historical-only migration trail.
 
 ## 7.4 Translation + locale/country
 
@@ -198,11 +195,11 @@ Rollback: use rollback block in migration `020` to recreate table + FKs.
 
 ## Stage D (`sku_rules` retirement)
 
-1. Freeze remaining seed/migration dependency on `sku_rules` (bootstrap derivation moved to canonical rows in migration `022` + `sql/seed.sql`).
-2. Verify zero external usage window.
-3. Drop `sku_rules` constraints/indexes/table.
+1. Completed: seed/bootstrap derivation moved to canonical rows (`022` + `sql/seed.sql`).
+2. Completed: narrow direct-reference verification across runtime, seed, schema/migrations, tests, and cleanup docs.
+3. Completed: migration `023_drop_legacy_sku_rules.sql` drops `sku_rules` constraints/indexes/table.
 
-Rollback: restore table from pre-drop backup or down migration.
+Rollback: use rollback SQL embedded in migration `023_drop_legacy_sku_rules.sql` to recreate `sku_rules` and its legacy indexes/constraint if needed.
 
 ## 9) Certainty map
 
@@ -212,11 +209,12 @@ Rollback: restore table from pre-drop backup or down migration.
 
 ## 10) Immediate next action (non-vague)
 
-**This run delivered `cpq_import_runs` residue cleanup and `sku_rules` retirement prep:**
+**This run delivered `cpq_import_runs` residue cleanup and final `sku_rules` retirement:**
 1. `/api/cpq/generate` GET no longer depends on `cpq_import_runs` or `run_id`.
 2. Migration `020` removes FK coupling from `cpq_import_rows.import_run_id` and `cpq_products.import_run_id`, then drops `cpq_import_runs`.
 3. Migration `021` removes `cpq_import_rows.import_run_id` and `cpq_products.import_run_id`.
 4. Migration `022` moves setup/bootstrap derivation for `sku_digit_option_config` onto canonical `cpq_import_rows`.
-5. Prior low-risk drops remain in place (`016` position placeholders, `017` brake compatibility columns, `018` product identity columns, `019` remaining fallback-coupled attributes).
+5. Migration `023` drops retired `sku_rules` table plus table-only indexes/constraints with explicit rollback SQL.
+6. Prior low-risk drops remain in place (`016` position placeholders, `017` brake compatibility columns, `018` product identity columns, `019` remaining fallback-coupled attributes).
 
-Recommended next cleanup target: **final `sku_rules` removal migration** (constraints/indexes/table) with a rollback script and quick external-usage verification gate.
+Cleanup phase status: **effectively complete for planned schema-retirement scope**. Next step is return to feature delivery (or a tiny follow-up only if external consumers report legacy `sku_rules` dependency).
