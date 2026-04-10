@@ -34,6 +34,8 @@ export type StartConfigurationOverrides = {
   partName?: string;
   headerId?: string;
   detailId?: string;
+  sourceHeaderId?: string;
+  sourceDetailId?: string;
   profile?: string;
   instance?: string;
   accountCode?: string;
@@ -84,6 +86,8 @@ export const buildStartConfigurationPayload = (overrides?: StartConfigurationOve
   const partName = overrides?.partName ?? defaults.partName;
   const headerId = overrides?.headerId ?? defaults.headerId;
   const detailId = overrides?.detailId ?? defaults.detailId;
+  const sourceHeaderId = overrides?.sourceHeaderId ?? (overrides?.sourceDetailId ? headerId : '');
+  const sourceDetailId = overrides?.sourceDetailId ?? '';
   const profile = overrides?.profile ?? defaults.profile;
   const instance = overrides?.instance ?? defaults.instance;
   const accountCode = overrides?.accountCode ?? defaults.company;
@@ -110,8 +114,8 @@ export const buildStartConfigurationPayload = (overrides?: StartConfigurationOve
         detailId,
       },
       sourceHeaderDetail: {
-        headerId: '',
-        detailId: '',
+        headerId: sourceHeaderId,
+        detailId: sourceDetailId,
       },
       integrationParameters: [
         { name: 'AccountType', simpleValue: defaults.accountType, isNull: false, type: 'string' },

@@ -81,6 +81,8 @@ export type InitConfiguratorRequest = {
   partName?: string;
   headerId?: string;
   detailId?: string;
+  sourceHeaderId?: string;
+  sourceDetailId?: string;
   profile?: string;
   instance?: string;
   context?: Partial<BikeBuilderContext>;

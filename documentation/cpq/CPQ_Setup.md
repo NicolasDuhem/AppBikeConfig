@@ -63,9 +63,19 @@ How it affects CPQ StartConfiguration:
 2. First active rows prefill current selections.
 3. Account selection changes CPQ context values.
 4. Ruleset selection triggers fresh StartConfiguration.
-5. Configure calls continue within returned session.
+5. Configure calls continue within returned session for manual/UI edits.
 
-## 6) Integration settings still required in environment
+## 6) Sampler/traversal detail-session behavior
+
+- Sampler keeps a base seed record (ruleset, namespace, header, account context, base detail/session).
+- For each sampled variant, sampler starts a fresh branch by calling StartConfiguration again.
+- Branch StartConfiguration uses:
+  - new `headerDetail.detailId` (new branch detailId)
+  - `sourceHeaderDetail.detailId` = base detailId (or parent detail when chaining).
+- Configure is used only after branch StartConfiguration to apply option changes.
+- Saved `CPQ_sampler_result` rows should contain branch detail/session values (not seed detail/session).
+
+## 7) Integration settings still required in environment
 
 Set these env variables in runtime (local/Vercel):
 - `CPQ_API_KEY`

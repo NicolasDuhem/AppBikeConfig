@@ -51,8 +51,8 @@ Accept: application/json
       "detailId": "<guid>"
     },
     "sourceHeaderDetail": {
-      "headerId": "",
-      "detailId": ""
+      "headerId": "Simulator",
+      "detailId": "<base-or-parent-detail-guid>"
     },
     "integrationParameters": [
       { "name": "AccountType", "simpleValue": "Dealer", "isNull": false, "type": "string" },
@@ -72,6 +72,8 @@ Notes:
 - `CustomerId` and `LanguageCode` are included when available.
 - `CustomerLocation` is derived from account setup country code.
 - `part.name` equals selected ruleset/part name.
+- `headerDetail.detailId` is the new working detail for this StartConfiguration.
+- `sourceHeaderDetail.detailId` is optional for clone/branch behavior; when provided it points to the source detail context.
 
 ## 4) Configure request shape (minimal, working)
 
@@ -106,8 +108,23 @@ Rules:
 - No trimming.
 - No split on `~`.
 - Pass full session ID to `/configure`.
+- Remember: Configure is session-driven and does not create a new detailId by itself.
 
-## 6) Parsing model used by app
+## 6) Sampler branch model (implemented)
+
+Sampler now uses StartConfiguration per sampled branch:
+
+1. Build/load seed config once (base detail/session).
+2. For each sampled variant:
+   - generate `branchDetailId`
+   - call StartConfiguration with `headerDetail.detailId = branchDetailId`
+   - set `sourceHeaderDetail.detailId = baseDetailId` (or parent branch detail)
+3. Apply branch option changes using Configure with the returned branch session.
+4. Persist branch result with branch detail/session metadata.
+
+This avoids the old configure-only chain where multiple sampled variants shared one detail/session lineage.
+
+## 7) Parsing model used by app
 
 Parser traverses CPQ response using:
 - `Pages[]`
@@ -130,7 +147,7 @@ Selected option logic:
 - Primary: `ScreenOption.Value === SelectableValue.Value`.
 - Fallback: first visible+enabled option.
 
-## 7) IPN extraction
+## 8) IPN extraction
 
 IPN is extracted from response using these patterns:
 - direct fields: `IPNCode`, `ipnCode`, `IPN`, `ItemNumber`

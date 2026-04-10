@@ -70,6 +70,10 @@ type CapturedConfiguration = {
   headerId: string;
   detailId: string;
   sessionId: string;
+  baseDetailId: string;
+  sourceDetailId: string;
+  branchDetailId: string;
+  samplerMode: TraversalMode;
   description?: string;
   ipn?: string;
   price?: number;
@@ -84,6 +88,19 @@ type CapturedConfiguration = {
   }[];
   signature: string;
   rawSnippet?: unknown;
+};
+
+type SamplerSeedContext = {
+  baseDetailId: string;
+  baseSessionId: string;
+  ruleset: string;
+  namespace: string;
+  headerId: string;
+  accountCode: string;
+  customerId?: string;
+  currency?: string;
+  language?: string;
+  countryCode?: string;
 };
 
 type PersistenceStatus = 'idle' | 'saving' | 'saved' | 'error';
@@ -140,8 +157,12 @@ export default function BikeBuilderPage() {
   const [currentOptionLabel, setCurrentOptionLabel] = useState('-');
   const [currentTraversalLevel, setCurrentTraversalLevel] = useState(0);
   const [currentTraversalPathLabel, setCurrentTraversalPathLabel] = useState('-');
+  const [currentSamplerMode, setCurrentSamplerMode] = useState('-');
+  const [currentTraversalBaseDetailId, setCurrentTraversalBaseDetailId] = useState('-');
+  const [currentTraversalSourceDetailId, setCurrentTraversalSourceDetailId] = useState('-');
   const [currentTraversalDetailId, setCurrentTraversalDetailId] = useState('-');
   const [currentTraversalSessionId, setCurrentTraversalSessionId] = useState('-');
+  const [currentTraversalCallType, setCurrentTraversalCallType] = useState<CallType | '-'>('-');
   const [results, setResults] = useState<CapturedConfiguration[]>([]);
   const [delayMs, setDelayMs] = useState(5000);
   const [maxDepth, setMaxDepth] = useState(3);
@@ -278,6 +299,8 @@ export default function BikeBuilderPage() {
   const saveSnapshot = ({
     nextState,
     activeDetailId,
+    baseDetailId,
+    sourceDetailId,
     rawSnippet,
     traversalLevel,
     traversalPath,
@@ -288,6 +311,8 @@ export default function BikeBuilderPage() {
   }: {
     nextState: NormalizedBikeBuilderState;
     activeDetailId: string;
+    baseDetailId: string;
+    sourceDetailId: string;
     rawSnippet?: unknown;
     traversalLevel: number;
     traversalPath: TraversalStep[];
@@ -313,6 +338,10 @@ export default function BikeBuilderPage() {
       headerId: target.headerId,
       detailId: activeDetailId,
       sessionId: nextState.sessionId,
+      baseDetailId,
+      sourceDetailId,
+      branchDetailId: activeDetailId,
+      samplerMode: activeMode ?? 'sampler',
       description: nextState.productDescription,
       ipn: nextState.ipnCode,
       price: nextState.configuredPrice,
@@ -395,7 +424,7 @@ export default function BikeBuilderPage() {
   const startFreshConfiguration = async (
     nextTarget = target,
     freshDetailId = crypto.randomUUID(),
-    options?: { clearState?: boolean },
+    options?: { clearState?: boolean; sourceDetailId?: string; sourceHeaderId?: string },
   ): Promise<CpqRouteResponse> => {
     setRequestState({ loading: true });
     setActiveFeatureId(null);
@@ -410,6 +439,8 @@ export default function BikeBuilderPage() {
       partName: nextTarget.partName,
       headerId: nextTarget.headerId,
       detailId: freshDetailId,
+      sourceHeaderId: options?.sourceHeaderId,
+      sourceDetailId: options?.sourceDetailId,
       context: { accountCode, customerId, currency, language, countryCode },
     };
 
@@ -428,6 +459,7 @@ export default function BikeBuilderPage() {
 
     setState(payload.parsed);
     setLastCallType('StartConfiguration');
+    setCurrentTraversalCallType('StartConfiguration');
     setLastChangedFeatureId('');
     setLastChangedOptionId('');
     setLastChangedOptionValue('');
@@ -517,6 +549,7 @@ export default function BikeBuilderPage() {
     setConfigureCallCount(configureCountRef.current);
     setState(payload.parsed);
     setLastCallType('Configure');
+    setCurrentTraversalCallType('Configure');
     setLastChangedFeatureId(featureId);
     setLastChangedOptionId(optionId);
     setLastChangedOptionValue(optionValue ?? '');
@@ -567,10 +600,23 @@ export default function BikeBuilderPage() {
   };
 
   const runSampler = async (seedState: NormalizedBikeBuilderState) => {
-    let currentState = seedState;
-    const currentDetailId = detailId;
+    const seed: SamplerSeedContext = {
+      baseDetailId: detailId,
+      baseSessionId: seedState.sessionId,
+      ruleset: target.ruleset,
+      namespace: target.namespace,
+      headerId: target.headerId,
+      accountCode,
+      customerId,
+      currency,
+      language,
+      countryCode,
+    };
 
-    const features = getTraversableFeatures(currentState, debugIncludeHidden);
+    setCurrentSamplerMode('sampler-per-branch-start');
+    setCurrentTraversalBaseDetailId(seed.baseDetailId);
+
+    const features = getTraversableFeatures(seedState, debugIncludeHidden);
     for (const feature of features) {
       if (traversalControlRef.current.stop || hasExceededRunLimits()) return;
       setCurrentFeatureLabel(feature.featureLabel);
@@ -585,17 +631,31 @@ export default function BikeBuilderPage() {
           if (!keepGoing) return;
         }
 
+        const branchDetailId = crypto.randomUUID();
+        const sourceDetailId = seed.baseDetailId;
+        setCurrentTraversalSourceDetailId(sourceDetailId);
+        setCurrentTraversalDetailId(branchDetailId);
+        setCurrentTraversalCallType('StartConfiguration');
+        const branchStart = await startFreshConfiguration(target, branchDetailId, {
+          clearState: false,
+          sourceHeaderId: seed.headerId,
+          sourceDetailId,
+        });
+        setCurrentTraversalSessionId(branchStart.parsed.sessionId ?? '-');
+        setCurrentTraversalCallType('Configure');
+
         const payload = await configureSelection({
-          sourceState: currentState,
+          sourceState: branchStart.parsed,
           featureId: feature.featureId,
           optionId: option.optionId,
           optionValue: option.value,
         });
-
-        currentState = payload.parsed;
+        setCurrentTraversalSessionId(payload.parsed.sessionId ?? '-');
         saveSnapshot({
           nextState: payload.parsed,
-          activeDetailId: currentDetailId,
+          activeDetailId: branchDetailId,
+          baseDetailId: seed.baseDetailId,
+          sourceDetailId,
           rawSnippet: extractRawSnippet(payload.rawResponse),
           traversalLevel: 1,
           traversalPath: [{ featureId: feature.featureId, featureLabel: feature.featureLabel, optionId: option.optionId, optionLabel: option.label, optionValue: option.value }],
@@ -705,6 +765,8 @@ export default function BikeBuilderPage() {
         saveSnapshot({
           nextState: payload.parsed,
           activeDetailId: branch.detail,
+          baseDetailId: detailId,
+          sourceDetailId: branch.detail,
           rawSnippet: extractRawSnippet(payload.rawResponse),
           traversalLevel: levelIndex + 1,
           traversalPath: nextPath,
@@ -735,6 +797,12 @@ export default function BikeBuilderPage() {
     setElapsedMs(0);
     setCurrentFeatureLabel('-');
     setCurrentOptionLabel('-');
+    setCurrentSamplerMode('-');
+    setCurrentTraversalBaseDetailId('-');
+    setCurrentTraversalSourceDetailId('-');
+    setCurrentTraversalDetailId('-');
+    setCurrentTraversalSessionId('-');
+    setCurrentTraversalCallType('-');
     setTraversalStatus('running');
     setActiveMode(mode);
     setRequestState({ loading: false });
@@ -764,8 +832,12 @@ export default function BikeBuilderPage() {
       setCurrentOptionLabel('-');
       setCurrentTraversalLevel(0);
       setCurrentTraversalPathLabel('-');
+      setCurrentSamplerMode('-');
+      setCurrentTraversalBaseDetailId('-');
+      setCurrentTraversalSourceDetailId('-');
       setCurrentTraversalDetailId('-');
       setCurrentTraversalSessionId('-');
+      setCurrentTraversalCallType('-');
     }
   };
 
@@ -929,15 +1001,19 @@ export default function BikeBuilderPage() {
           <div style={styles.statusRow}>
             <span style={styles.badge}>status: {traversalStatus}</span>
             <span style={styles.badge}>mode: {activeMode ?? '-'}</span>
+            <span style={styles.badge}>sampler mode: {currentSamplerMode}</span>
             <span style={styles.badge}>level: {currentTraversalLevel || '-'}</span>
             <span style={styles.badge}>feature: {currentFeatureLabel}</span>
             <span style={styles.badge}>option: {currentOptionLabel}</span>
             <span style={styles.badge}>path: {currentTraversalPathLabel}</span>
+            <span style={styles.badge}>baseDetailId: {currentTraversalBaseDetailId}</span>
+            <span style={styles.badge}>sourceDetailId: {currentTraversalSourceDetailId}</span>
             <span style={styles.badge}>results: {results.length}</span>
             <span style={styles.badge}>configure calls: {configureCallCount}</span>
             <span style={styles.badge}>elapsed: {(elapsedMs / 1000).toFixed(1)}s</span>
             <span style={styles.badge}>detailId: {currentTraversalDetailId}</span>
             <span style={styles.badge}>sessionId: {currentTraversalSessionId}</span>
+            <span style={styles.badge}>callType: {currentTraversalCallType}</span>
             <span style={styles.badge}>DB saves: {savedToDatabaseCount}</span>
             <span style={styles.badge}>DB save errors: {saveErrorCount}</span>
             <span style={styles.badge}>last DB status: {lastSaveStatus}</span>
@@ -1032,6 +1108,8 @@ export default function BikeBuilderPage() {
                       <span style={styles.tinyMuted}>{new Date(result.timestamp).toLocaleString()}</span>
                     </div>
                     <div style={styles.resultMeta}>Detail: {result.detailId}</div>
+                    <div style={styles.resultMeta}>Base detail: {result.baseDetailId}</div>
+                    <div style={styles.resultMeta}>Source detail: {result.sourceDetailId}</div>
                     <div style={styles.resultMeta}>Session: {result.sessionId}</div>
                     <div style={styles.resultMeta}>IPN Code: {result.ipn ?? '-'}</div>
                     <div style={styles.resultMeta}>Price: {typeof result.price === 'number' ? result.price : '-'}</div>
@@ -1054,6 +1132,12 @@ export default function BikeBuilderPage() {
                 <h3 style={styles.debugTitle}>Ruleset debug</h3>
                 <ul style={styles.debugList}>
                   <li>lastCallType: {lastCallType}</li>
+                  <li>sampler mode: {currentSamplerMode}</li>
+                  <li>baseDetailId: {currentTraversalBaseDetailId}</li>
+                  <li>sourceDetailId: {currentTraversalSourceDetailId}</li>
+                  <li>branch detailId: {currentTraversalDetailId}</li>
+                  <li>current sessionId: {currentTraversalSessionId}</li>
+                  <li>current callType: {currentTraversalCallType}</li>
                   <li>lastChangedFeatureId: {lastChangedFeatureId || '-'}</li>
                   <li>lastChangedOptionId: {lastChangedOptionId || '-'}</li>
                   <li>lastChangedOptionValue: {lastChangedOptionValue || '-'}</li>

@@ -204,6 +204,8 @@ export const startConfiguration = async (
     partName: request.partName || request.ruleset,
     headerId: request.headerId,
     detailId: request.detailId,
+    sourceHeaderId: request.sourceHeaderId,
+    sourceDetailId: request.sourceDetailId,
     profile: request.profile,
     instance: request.instance,
     accountCode: request.context?.accountCode,

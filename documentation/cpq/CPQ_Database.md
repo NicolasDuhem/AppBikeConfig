@@ -80,3 +80,16 @@ These are infrastructure/integration concerns.
 - active flags
 
 These are maintained in setup tables and setup UI.
+
+## 4) `CPQ_sampler_result` branch persistence expectation
+
+Sampler persistence must reflect per-branch StartConfiguration behavior:
+
+- `detail_id` = branch detailId generated for that sampled variant.
+- `session_id` = sessionId returned for that branch.
+- `json_result` should include:
+  - `baseDetailId`
+  - `sourceDetailId`
+  - `branchDetailId`
+
+If two sampled variants start separate branches, their `detail_id` values should differ.
