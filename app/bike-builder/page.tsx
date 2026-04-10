@@ -86,6 +86,8 @@ type CapturedConfiguration = {
   rawSnippet?: unknown;
 };
 
+type PersistenceStatus = 'idle' | 'saving' | 'saved' | 'error';
+
 type TraversalStep = {
   featureLabel: string;
   featureId: string;
@@ -151,6 +153,11 @@ export default function BikeBuilderPage() {
   const [includeSelectedOption, setIncludeSelectedOption] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [expandedResultKeys, setExpandedResultKeys] = useState<Record<string, boolean>>({});
+  const [persistenceEnabled, setPersistenceEnabled] = useState(true);
+  const [savedToDatabaseCount, setSavedToDatabaseCount] = useState(0);
+  const [saveErrorCount, setSaveErrorCount] = useState(0);
+  const [lastSaveStatus, setLastSaveStatus] = useState<PersistenceStatus>('idle');
+  const [lastSaveMessage, setLastSaveMessage] = useState('-');
 
   useEffect(() => {
     const loadSetup = async () => {
@@ -316,6 +323,48 @@ export default function BikeBuilderPage() {
     };
 
     setResults((prev) => [...prev, { ...captured, sequence: prev.length + 1 }]);
+
+    if (!persistenceEnabled) return;
+
+    void persistCapturedResult(captured);
+  };
+
+  const persistCapturedResult = async (captured: CapturedConfiguration) => {
+    setLastSaveStatus('saving');
+    try {
+      const res = await fetch('/api/cpq/sampler-result', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ipn_code: captured.ipn ?? null,
+          ruleset: captured.ruleset,
+          account_code: accountCode,
+          customer_id: customerId || null,
+          currency: currency || null,
+          language: language || null,
+          country_code: countryCode || null,
+          namespace: captured.namespace,
+          header_id: captured.headerId,
+          detail_id: captured.detailId,
+          session_id: captured.sessionId,
+          json_result: captured,
+        }),
+      });
+
+      if (!res.ok) {
+        const payload = (await res.json().catch(() => ({ error: 'Unknown persistence error' }))) as { error?: string };
+        throw new Error(payload.error ?? 'Unknown persistence error');
+      }
+
+      setSavedToDatabaseCount((prev) => prev + 1);
+      setLastSaveStatus('saved');
+      setLastSaveMessage(`saved result #${captured.sequence}`);
+    } catch (error) {
+      setSaveErrorCount((prev) => prev + 1);
+      setLastSaveStatus('error');
+      setLastSaveMessage(error instanceof Error ? error.message : String(error));
+      console.error('[cpq/sampler] persist failed', { captured, error });
+    }
   };
 
   const sleepWithControl = async (ms: number) => {
@@ -689,6 +738,10 @@ export default function BikeBuilderPage() {
     setTraversalStatus('running');
     setActiveMode(mode);
     setRequestState({ loading: false });
+    setSavedToDatabaseCount(0);
+    setSaveErrorCount(0);
+    setLastSaveStatus('idle');
+    setLastSaveMessage('-');
 
     try {
       if (mode === 'sampler') await runSampler(state);
@@ -868,6 +921,10 @@ export default function BikeBuilderPage() {
               <input type="checkbox" checked={includeSelectedOption} onChange={(e) => setIncludeSelectedOption(e.target.checked)} />
               Include currently selected option
             </label>
+            <label style={styles.checkboxLabel}>
+              <input type="checkbox" checked={persistenceEnabled} onChange={(e) => setPersistenceEnabled(e.target.checked)} />
+              Persist sampler results to DB
+            </label>
           </div>
           <div style={styles.statusRow}>
             <span style={styles.badge}>status: {traversalStatus}</span>
@@ -881,6 +938,10 @@ export default function BikeBuilderPage() {
             <span style={styles.badge}>elapsed: {(elapsedMs / 1000).toFixed(1)}s</span>
             <span style={styles.badge}>detailId: {currentTraversalDetailId}</span>
             <span style={styles.badge}>sessionId: {currentTraversalSessionId}</span>
+            <span style={styles.badge}>DB saves: {savedToDatabaseCount}</span>
+            <span style={styles.badge}>DB save errors: {saveErrorCount}</span>
+            <span style={styles.badge}>last DB status: {lastSaveStatus}</span>
+            <span style={styles.badge}>last DB message: {lastSaveMessage}</span>
           </div>
         </section>
 
