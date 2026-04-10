@@ -3,7 +3,10 @@ create table if not exists cpq_image_management (
   feature_label text not null,
   option_label text not null,
   option_value text not null,
-  picture_link text,
+  picture_link_1 text,
+  picture_link_2 text,
+  picture_link_3 text,
+  picture_link_4 text,
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -18,7 +21,11 @@ create index if not exists idx_cpq_image_management_option_value
 
 create index if not exists idx_cpq_image_management_missing_picture
   on cpq_image_management (feature_label)
-  where picture_link is null or btrim(picture_link) = '';
+  where
+    (picture_link_1 is null or btrim(picture_link_1) = '')
+    and (picture_link_2 is null or btrim(picture_link_2) = '')
+    and (picture_link_3 is null or btrim(picture_link_3) = '')
+    and (picture_link_4 is null or btrim(picture_link_4) = '');
 
 create or replace function CPQ_setup_set_updated_at()
 returns trigger
