@@ -91,7 +91,6 @@ export type ConfigureConfiguratorRequest = {
   featureId: string;
   optionValue?: string;
   optionId?: string;
-  trimSessionIdBeforeConfigure?: boolean;
   ruleset?: string;
   context?: Partial<BikeBuilderContext>;
 };

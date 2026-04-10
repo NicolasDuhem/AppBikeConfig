@@ -149,7 +149,6 @@ export default function BikeBuilderPage() {
   const [configureCallCount, setConfigureCallCount] = useState(0);
   const [debugIncludeHidden, setDebugIncludeHidden] = useState(false);
   const [includeSelectedOption, setIncludeSelectedOption] = useState(false);
-  const [trimSessionIdBeforeConfigure, setTrimSessionIdBeforeConfigure] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [expandedResultKeys, setExpandedResultKeys] = useState<Record<string, boolean>>({});
 
@@ -448,7 +447,6 @@ export default function BikeBuilderPage() {
       featureId,
       optionId,
       optionValue,
-      trimSessionIdBeforeConfigure,
       context: { accountCode, customerId, currency, language, countryCode },
     };
 
@@ -869,14 +867,6 @@ export default function BikeBuilderPage() {
             <label style={styles.checkboxLabel}>
               <input type="checkbox" checked={includeSelectedOption} onChange={(e) => setIncludeSelectedOption(e.target.checked)} />
               Include currently selected option
-            </label>
-            <label style={styles.checkboxLabel}>
-              <input
-                type="checkbox"
-                checked={trimSessionIdBeforeConfigure}
-                onChange={(e) => setTrimSessionIdBeforeConfigure(e.target.checked)}
-              />
-              Trim session ID before Configure
             </label>
           </div>
           <div style={styles.statusRow}>

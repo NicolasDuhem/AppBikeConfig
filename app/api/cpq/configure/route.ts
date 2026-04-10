@@ -18,9 +18,6 @@ export async function POST(req: NextRequest) {
     process.env.CPQ_BASE_URL ?? 'https://configurator.eu1.inforcloudsuite.com/api/v4/ProductConfiguratorUI.svc/json'
   ).replace(/\/$/, '');
   const finalConfigureUrl = `${baseUrl}/configure`;
-  const sessionIdForConfigure = body.trimSessionIdBeforeConfigure
-    ? body.sessionId.split('~').pop() ?? body.sessionId
-    : body.sessionId;
 
   if (!body?.sessionId || !body.featureId || body.optionValue === undefined) {
     return NextResponse.json(
@@ -35,7 +32,6 @@ export async function POST(req: NextRequest) {
     featureId: body.featureId,
     optionId: body.optionId,
     optionValue: body.optionValue,
-    trimSessionIdBeforeConfigure: body.trimSessionIdBeforeConfigure,
     finalConfigureUrl,
     context,
   });
@@ -55,7 +51,7 @@ export async function POST(req: NextRequest) {
       rawResponse: normalized.raw ?? normalized,
       requestBody: {
         finalConfigureUrl,
-        sessionID: sessionIdForConfigure,
+        sessionID: body.sessionId,
         selections: [{ id: body.featureId, value: body.optionValue }],
       },
       callType: 'Configure',
@@ -89,7 +85,7 @@ export async function POST(req: NextRequest) {
       rawResponse: cpqResponse,
       requestBody: {
         finalConfigureUrl,
-        sessionID: sessionIdForConfigure,
+        sessionID: body.sessionId,
         selections: [{ id: body.featureId, value: body.optionValue }],
       },
       callType: 'Configure',
