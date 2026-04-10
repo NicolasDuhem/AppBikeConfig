@@ -3,6 +3,7 @@ export type BikeBuilderContext = {
   customerId?: string;
   currency?: string;
   language?: string;
+  countryCode?: string;
 };
 
 export type BikeBuilderOptionMetadata = {

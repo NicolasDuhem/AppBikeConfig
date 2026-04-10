@@ -8,6 +8,7 @@ const buildContext = (input?: Partial<BikeBuilderContext>) => ({
   customerId: input?.customerId,
   currency: input?.currency,
   language: input?.language,
+  countryCode: input?.countryCode,
 });
 
 export async function POST(req: NextRequest) {

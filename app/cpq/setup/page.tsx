@@ -8,6 +8,7 @@ type AccountContext = {
   customer_id: string;
   currency: string;
   language: string;
+  country_code: string;
   is_active: boolean;
 };
 
@@ -29,6 +30,7 @@ const emptyAccount: Omit<AccountContext, 'id'> = {
   customer_id: '',
   currency: 'GBP',
   language: 'en-GB',
+  country_code: 'GB',
   is_active: true,
 };
 
@@ -53,7 +55,12 @@ export default function CpqSetupPage() {
   const [status, setStatus] = useState('');
 
   const canSubmitAccount = useMemo(
-    () => !!accountDraft.account_code.trim() && !!accountDraft.customer_id.trim() && !!accountDraft.currency.trim() && !!accountDraft.language.trim(),
+    () =>
+      !!accountDraft.account_code.trim() &&
+      !!accountDraft.customer_id.trim() &&
+      !!accountDraft.currency.trim() &&
+      !!accountDraft.language.trim() &&
+      /^[A-Za-z]{2}$/.test(accountDraft.country_code.trim()),
     [accountDraft],
   );
 
@@ -88,7 +95,7 @@ export default function CpqSetupPage() {
 
   const saveAccount = async () => {
     if (!canSubmitAccount) {
-      setStatus('Account code, customer ID, currency, and language are required.');
+      setStatus('Account code, customer ID, currency, language, and 2-letter country code are required.');
       return;
     }
 
@@ -191,6 +198,13 @@ export default function CpqSetupPage() {
             <label>Customer ID<input value={accountDraft.customer_id} onChange={(e) => setAccountDraft((prev) => ({ ...prev, customer_id: e.target.value }))} /></label>
             <label>Currency<input value={accountDraft.currency} onChange={(e) => setAccountDraft((prev) => ({ ...prev, currency: e.target.value }))} /></label>
             <label>Language<input value={accountDraft.language} onChange={(e) => setAccountDraft((prev) => ({ ...prev, language: e.target.value }))} /></label>
+            <label>Country code
+              <input
+                value={accountDraft.country_code}
+                maxLength={2}
+                onChange={(e) => setAccountDraft((prev) => ({ ...prev, country_code: e.target.value.toUpperCase() }))}
+              />
+            </label>
           </div>
           <label className="inlineCheck"><input type="checkbox" checked={accountDraft.is_active} onChange={(e) => setAccountDraft((prev) => ({ ...prev, is_active: e.target.checked }))} /> Active</label>
           <div className="toolbar compactToolbar">
@@ -200,7 +214,7 @@ export default function CpqSetupPage() {
           <div className="tableWrap" style={{ maxHeight: 420 }}>
             <table>
               <thead>
-                <tr><th>Account</th><th>Customer ID</th><th>Currency</th><th>Language</th><th>Active</th><th>Actions</th></tr>
+                <tr><th>Account</th><th>Customer ID</th><th>Currency</th><th>Language</th><th>Country</th><th>Active</th><th>Actions</th></tr>
               </thead>
               <tbody>
                 {accounts.map((row) => (
@@ -209,10 +223,11 @@ export default function CpqSetupPage() {
                     <td>{row.customer_id}</td>
                     <td>{row.currency}</td>
                     <td>{row.language}</td>
+                    <td>{row.country_code}</td>
                     <td>{row.is_active ? 'Yes' : 'No'}</td>
                     <td>
                       <div className="rowButtons">
-                        <button onClick={() => { setEditingAccountId(row.id); setAccountDraft({ account_code: row.account_code, customer_id: row.customer_id, currency: row.currency, language: row.language, is_active: row.is_active }); }}>Edit</button>
+                        <button onClick={() => { setEditingAccountId(row.id); setAccountDraft({ account_code: row.account_code, customer_id: row.customer_id, currency: row.currency, language: row.language, country_code: row.country_code, is_active: row.is_active }); }}>Edit</button>
                         <button onClick={() => void deleteAccount(row.id)}>Delete</button>
                       </div>
                     </td>

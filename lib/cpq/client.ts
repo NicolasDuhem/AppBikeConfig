@@ -210,6 +210,7 @@ export const startConfiguration = async (
     customerId: request.context?.customerId,
     currency: request.context?.currency,
     language: request.context?.language,
+    countryCode: request.context?.countryCode,
   });
 
   if (!result.ok) {

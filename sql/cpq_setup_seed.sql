@@ -20,15 +20,16 @@ before update on CPQ_setup_ruleset
 for each row
 execute function CPQ_setup_set_updated_at();
 
-insert into CPQ_setup_account_context (account_code, customer_id, currency, language, is_active)
+insert into CPQ_setup_account_context (account_code, customer_id, currency, language, country_code, is_active)
 values
-  ('A000', 'CUST-0001', 'GBP', 'en-GB', true),
-  ('A100', 'CUST-0100', 'EUR', 'en-GB', true),
-  ('A200', 'CUST-0200', 'USD', 'en-US', true)
+  ('A000', 'CUST-0001', 'GBP', 'en-GB', 'GB', true),
+  ('A100', 'CUST-0100', 'EUR', 'en-GB', 'FR', true),
+  ('A200', 'CUST-0200', 'USD', 'en-US', 'US', true)
 on conflict (account_code) do update
 set customer_id = excluded.customer_id,
     currency = excluded.currency,
     language = excluded.language,
+    country_code = excluded.country_code,
     is_active = excluded.is_active;
 
 insert into CPQ_setup_ruleset (cpq_ruleset, description, bike_type, namespace, header_id, sort_order, is_active)
