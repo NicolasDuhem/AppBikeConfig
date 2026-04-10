@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { startConfiguration } from '../../../../lib/cpq/client';
+import { buildStartConfigurationPayload } from '../../../../lib/cpq/config';
 import { mapCpqToNormalizedState } from '../../../../lib/cpq/mappers';
 import { mockInitState } from '../../../../lib/cpq/mock-data';
 import { InitConfiguratorRequest } from '../../../../lib/cpq/types';
@@ -20,6 +21,19 @@ export async function POST(req: NextRequest) {
   };
 
   console.log('[cpq/init] request', requestPayload);
+  const cpqStartRequestBody = buildStartConfigurationPayload({
+    namespace: requestPayload.namespace,
+    partName: requestPayload.partName || requestPayload.ruleset,
+    headerId: requestPayload.headerId,
+    detailId: requestPayload.detailId,
+    profile: requestPayload.profile,
+    instance: requestPayload.instance,
+    accountCode: requestPayload.context?.accountCode,
+    customerId: requestPayload.context?.customerId,
+    currency: requestPayload.context?.currency,
+    language: requestPayload.context?.language,
+    countryCode: requestPayload.context?.countryCode,
+  });
 
   if (process.env.CPQ_USE_MOCK === 'true') {
     const parsed = mockInitState(ruleset);
@@ -27,7 +41,7 @@ export async function POST(req: NextRequest) {
       sessionId: parsed.sessionId,
       parsed,
       rawResponse: parsed.raw ?? parsed,
-      requestBody: requestPayload,
+      requestBody: cpqStartRequestBody,
       callType: 'StartConfiguration',
     });
   }
@@ -40,7 +54,7 @@ export async function POST(req: NextRequest) {
       sessionId: normalized.sessionId,
       parsed: normalized,
       rawResponse: cpqResponse,
-      requestBody: requestPayload,
+      requestBody: cpqStartRequestBody,
       callType: 'StartConfiguration',
     });
   } catch (error) {

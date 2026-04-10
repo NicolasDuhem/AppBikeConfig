@@ -40,6 +40,7 @@ export type StartConfigurationOverrides = {
   customerId?: string;
   currency?: string;
   language?: string;
+  countryCode?: string;
 };
 
 const requireEnv = (key: string): string => {
@@ -89,6 +90,7 @@ export const buildStartConfigurationPayload = (overrides?: StartConfigurationOve
   const customerId = overrides?.customerId;
   const currency = overrides?.currency ?? defaults.currency;
   const language = overrides?.language;
+  const countryCode = overrides?.countryCode ?? defaults.customerLocation;
 
   return {
     inputParameters: {
@@ -118,7 +120,7 @@ export const buildStartConfigurationPayload = (overrides?: StartConfigurationOve
         { name: 'AccountCode', simpleValue: accountCode, isNull: false, type: 'string' },
         ...(customerId ? [{ name: 'CustomerId', simpleValue: customerId, isNull: false as const, type: 'string' as const }] : []),
         ...(language ? [{ name: 'LanguageCode', simpleValue: language, isNull: false as const, type: 'string' as const }] : []),
-        { name: 'CustomerLocation', simpleValue: defaults.customerLocation, isNull: false, type: 'string' },
+        { name: 'CustomerLocation', simpleValue: countryCode, isNull: false, type: 'string' },
       ],
       rapidOptions: null,
     },

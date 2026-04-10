@@ -6,6 +6,7 @@ export type CpqAccountContextRecord = {
   customer_id: string;
   currency: string;
   language: string;
+  country_code: string;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -31,11 +32,12 @@ const parseBoolean = (value: unknown, fallback = true) => {
 };
 
 const asTrimmedText = (value: unknown) => String(value ?? '').trim();
+const ISO2_COUNTRY_REGEX = /^[A-Z]{2}$/;
 
 export async function listAccountContexts(activeOnly = false) {
   if (activeOnly) {
     return (await sql`
-      select id, account_code, customer_id, currency, language, is_active, created_at, updated_at
+      select id, account_code, customer_id, currency, language, country_code, is_active, created_at, updated_at
       from CPQ_setup_account_context
       where is_active = true
       order by account_code
@@ -43,7 +45,7 @@ export async function listAccountContexts(activeOnly = false) {
   }
 
   return (await sql`
-    select id, account_code, customer_id, currency, language, is_active, created_at, updated_at
+    select id, account_code, customer_id, currency, language, country_code, is_active, created_at, updated_at
     from CPQ_setup_account_context
     order by account_code
   `) as CpqAccountContextRecord[];
@@ -54,15 +56,20 @@ export async function createAccountContext(input: Record<string, unknown>) {
   const customerId = asTrimmedText(input.customer_id);
   const currency = asTrimmedText(input.currency).toUpperCase();
   const language = asTrimmedText(input.language);
+  const countryCode = asTrimmedText(input.country_code).toUpperCase();
 
-  if (!accountCode || !customerId || !currency || !language) {
-    throw new Error('account_code, customer_id, currency, and language are required');
+  if (!accountCode || !customerId || !currency || !language || !countryCode) {
+    throw new Error('account_code, customer_id, currency, language, and country_code are required');
+  }
+
+  if (!ISO2_COUNTRY_REGEX.test(countryCode)) {
+    throw new Error('country_code must be a 2-letter ISO code (for example, GB)');
   }
 
   const rows = (await sql`
-    insert into CPQ_setup_account_context (account_code, customer_id, currency, language, is_active)
-    values (${accountCode}, ${customerId}, ${currency}, ${language}, ${parseBoolean(input.is_active, true)})
-    returning id, account_code, customer_id, currency, language, is_active, created_at, updated_at
+    insert into CPQ_setup_account_context (account_code, customer_id, currency, language, country_code, is_active)
+    values (${accountCode}, ${customerId}, ${currency}, ${language}, ${countryCode}, ${parseBoolean(input.is_active, true)})
+    returning id, account_code, customer_id, currency, language, country_code, is_active, created_at, updated_at
   `) as CpqAccountContextRecord[];
 
   return rows[0];
@@ -73,9 +80,14 @@ export async function updateAccountContext(id: number, input: Record<string, unk
   const customerId = asTrimmedText(input.customer_id);
   const currency = asTrimmedText(input.currency).toUpperCase();
   const language = asTrimmedText(input.language);
+  const countryCode = asTrimmedText(input.country_code).toUpperCase();
 
-  if (!accountCode || !customerId || !currency || !language) {
-    throw new Error('account_code, customer_id, currency, and language are required');
+  if (!accountCode || !customerId || !currency || !language || !countryCode) {
+    throw new Error('account_code, customer_id, currency, language, and country_code are required');
+  }
+
+  if (!ISO2_COUNTRY_REGEX.test(countryCode)) {
+    throw new Error('country_code must be a 2-letter ISO code (for example, GB)');
   }
 
   const rows = (await sql`
@@ -84,9 +96,10 @@ export async function updateAccountContext(id: number, input: Record<string, unk
         customer_id = ${customerId},
         currency = ${currency},
         language = ${language},
+        country_code = ${countryCode},
         is_active = ${parseBoolean(input.is_active, true)}
     where id = ${id}
-    returning id, account_code, customer_id, currency, language, is_active, created_at, updated_at
+    returning id, account_code, customer_id, currency, language, country_code, is_active, created_at, updated_at
   `) as CpqAccountContextRecord[];
 
   return rows[0] ?? null;

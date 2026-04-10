@@ -36,6 +36,7 @@ type AccountContextRecord = {
   customer_id: string;
   currency: string;
   language: string;
+  country_code: string;
 };
 
 type RulesetRecord = {
@@ -109,6 +110,7 @@ export default function BikeBuilderPage() {
   const [customerId, setCustomerId] = useState('');
   const [currency, setCurrency] = useState('');
   const [language, setLanguage] = useState('');
+  const [countryCode, setCountryCode] = useState('');
   const [detailId, setDetailId] = useState(() => crypto.randomUUID());
   const [state, setState] = useState<NormalizedBikeBuilderState | null>(null);
   const [requestState, setRequestState] = useState<RequestState>({ loading: false });
@@ -172,6 +174,7 @@ export default function BikeBuilderPage() {
           setCustomerId(firstAccount.customer_id);
           setCurrency(firstAccount.currency);
           setLanguage(firstAccount.language);
+          setCountryCode(firstAccount.country_code);
         }
 
         const firstRuleset = nextRulesets[0];
@@ -359,7 +362,7 @@ export default function BikeBuilderPage() {
       partName: nextTarget.partName,
       headerId: nextTarget.headerId,
       detailId: freshDetailId,
-      context: { accountCode, customerId, currency, language },
+      context: { accountCode, customerId, currency, language, countryCode },
     };
 
     const res = await fetch('/api/cpq/init', {
@@ -420,6 +423,7 @@ export default function BikeBuilderPage() {
     setCustomerId(picked.customer_id);
     setCurrency(picked.currency);
     setLanguage(picked.language);
+    setCountryCode(picked.country_code);
   };
 
   const configureSelection = async ({
@@ -445,7 +449,7 @@ export default function BikeBuilderPage() {
       optionId,
       optionValue,
       trimSessionIdBeforeConfigure,
-      context: { accountCode, customerId, currency, language },
+      context: { accountCode, customerId, currency, language, countryCode },
     };
 
     const res = await fetch('/api/cpq/configure', {
@@ -947,6 +951,9 @@ export default function BikeBuilderPage() {
                 <strong>Language:</strong> {language || '-'}
               </div>
               <div>
+                <strong>Country code:</strong> {countryCode || '-'}
+              </div>
+              <div>
                 <strong>Namespace:</strong> {target.namespace}
               </div>
               <div>
@@ -1005,6 +1012,11 @@ export default function BikeBuilderPage() {
                   <li>changed option id (local UI stable id): {lastChangedOptionId || '-'}</li>
                   <li>changed option value sent to CPQ: {lastChangedOptionValue || '-'}</li>
                   <li>number of selections sent: {lastConfigureSelectionCount}</li>
+                  <li>account code: {accountCode || '-'}</li>
+                  <li>customer id: {customerId || '-'}</li>
+                  <li>currency: {currency || '-'}</li>
+                  <li>language: {language || '-'}</li>
+                  <li>country_code: {countryCode || '-'}</li>
                   <li>selected option before change: {lastSelectedBefore || '-'}</li>
                   <li>selected option after Configure: {lastSelectedAfter || '-'}</li>
                   <li>matched selected option source: {lastSelectedMatchSource || '-'}</li>
