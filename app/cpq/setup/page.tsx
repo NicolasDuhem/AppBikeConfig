@@ -28,10 +28,17 @@ type ImageManagementRow = {
   feature_label: string;
   option_label: string;
   option_value: string;
-  feature_id: string | null;
-  option_id: string | null;
   picture_link: string | null;
   is_active: boolean;
+};
+
+type SyncSummary = {
+  sourceRowsScanned: number;
+  selectedOptionsScanned: number;
+  distinctCombinationsFound: number;
+  inserted: number;
+  skippedExisting: number;
+  total: number;
 };
 
 type TabKey = 'accounts' | 'rulesets' | 'pictures';
@@ -69,6 +76,7 @@ export default function CpqSetupPage() {
   const [onlyMissingPicture, setOnlyMissingPicture] = useState(false);
   const [savingImageId, setSavingImageId] = useState<number | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [syncSummary, setSyncSummary] = useState<SyncSummary | null>(null);
 
   const canSubmitAccount = useMemo(
     () =>
@@ -229,17 +237,20 @@ export default function CpqSetupPage() {
 
   const syncPictures = async () => {
     setSyncing(true);
+    setSyncSummary(null);
     const res = await fetch('/api/cpq/setup/picture-management/sync', { method: 'POST' });
     const payload = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-      setStatus(payload.error || 'Failed to sync from sampler results');
+      const message = [payload.error, payload.details].filter(Boolean).join(' | ');
+      setStatus(message || 'Failed to sync from sampler results');
       setSyncing(false);
       return;
     }
 
-    const summary = payload.summary || {};
-    setStatus(`Sync complete. Inserted ${summary.inserted ?? 0}, updated IDs ${summary.updated ?? 0}, total rows ${summary.total ?? 0}.`);
+    const summary = (payload.summary || {}) as SyncSummary;
+    setSyncSummary(summary);
+    setStatus(`Sync complete. Inserted ${summary.inserted ?? 0}, skipped existing ${summary.skippedExisting ?? 0}, total rows ${summary.total ?? 0}.`);
     await loadPictures();
     setSyncing(false);
   };
@@ -380,6 +391,11 @@ export default function CpqSetupPage() {
               Missing picture link only
             </label>
           </div>
+          {syncSummary && (
+            <div className="note compactNote">
+              Scanned sampler rows: {syncSummary.sourceRowsScanned} | selectedOptions scanned: {syncSummary.selectedOptionsScanned} | distinct combos: {syncSummary.distinctCombinationsFound} | inserted: {syncSummary.inserted} | existing/skipped: {syncSummary.skippedExisting} | current total rows: {syncSummary.total}
+            </div>
+          )}
 
           <div className="tableWrap" style={{ maxHeight: 520 }}>
             <table>
@@ -388,8 +404,6 @@ export default function CpqSetupPage() {
                   <th>Feature label</th>
                   <th>Option label</th>
                   <th>Option value</th>
-                  <th>Feature ID</th>
-                  <th>Option ID</th>
                   <th>Picture link</th>
                   <th>Active</th>
                   <th>Actions</th>
@@ -401,8 +415,6 @@ export default function CpqSetupPage() {
                     <td>{row.feature_label}</td>
                     <td>{row.option_label}</td>
                     <td>{row.option_value}</td>
-                    <td>{row.feature_id ?? '-'}</td>
-                    <td>{row.option_id ?? '-'}</td>
                     <td style={{ minWidth: 320 }}>
                       <input
                         style={{ width: '100%' }}
@@ -433,7 +445,7 @@ export default function CpqSetupPage() {
                 ))}
                 {imageRows.length === 0 && (
                   <tr>
-                    <td colSpan={8}>No picture-management rows found. Run sync to seed from sampler results.</td>
+                    <td colSpan={6}>No picture-management rows found. Run sync to seed from sampler results.</td>
                   </tr>
                 )}
               </tbody>

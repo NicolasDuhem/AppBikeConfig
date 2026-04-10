@@ -179,6 +179,9 @@ export default function BikeBuilderPage() {
   const [saveErrorCount, setSaveErrorCount] = useState(0);
   const [lastSaveStatus, setLastSaveStatus] = useState<PersistenceStatus>('idle');
   const [lastSaveMessage, setLastSaveMessage] = useState('-');
+  const [manualSaveStatus, setManualSaveStatus] = useState<PersistenceStatus>('idle');
+  const [manualSaveMessage, setManualSaveMessage] = useState('-');
+  const [manualSaveTimestamp, setManualSaveTimestamp] = useState<string | null>(null);
 
   useEffect(() => {
     const loadSetup = async () => {
@@ -296,7 +299,7 @@ export default function BikeBuilderPage() {
       };
     });
 
-  const saveSnapshot = ({
+  const buildCapturedConfiguration = ({
     nextState,
     activeDetailId,
     baseDetailId,
@@ -308,6 +311,7 @@ export default function BikeBuilderPage() {
     changedFeatureId,
     changedOptionId,
     changedOptionValue,
+    source,
   }: {
     nextState: NormalizedBikeBuilderState;
     activeDetailId: string;
@@ -320,10 +324,10 @@ export default function BikeBuilderPage() {
     changedFeatureId: string;
     changedOptionId: string;
     changedOptionValue?: string;
-  }) => {
+    source?: string;
+  }): CapturedConfiguration & { source?: string } => {
     const signature = signatureForState(nextState);
-
-    const captured: CapturedConfiguration = {
+    return {
       sequence: results.length + 1,
       timestamp: new Date().toISOString(),
       traversalLevel,
@@ -349,7 +353,48 @@ export default function BikeBuilderPage() {
       dropdownOrderSnapshot: snapshotDropdownOrder(nextState),
       signature,
       rawSnippet,
+      source,
     };
+  };
+
+  const saveSnapshot = ({
+    nextState,
+    activeDetailId,
+    baseDetailId,
+    sourceDetailId,
+    rawSnippet,
+    traversalLevel,
+    traversalPath,
+    parentPathKey,
+    changedFeatureId,
+    changedOptionId,
+    changedOptionValue,
+  }: {
+    nextState: NormalizedBikeBuilderState;
+    activeDetailId: string;
+    baseDetailId: string;
+    sourceDetailId: string;
+    rawSnippet?: unknown;
+    traversalLevel: number;
+    traversalPath: TraversalStep[];
+    parentPathKey: string;
+    changedFeatureId: string;
+    changedOptionId: string;
+    changedOptionValue?: string;
+  }) => {
+    const captured = buildCapturedConfiguration({
+      nextState,
+      activeDetailId,
+      baseDetailId,
+      sourceDetailId,
+      rawSnippet,
+      traversalLevel,
+      traversalPath,
+      parentPathKey,
+      changedFeatureId,
+      changedOptionId,
+      changedOptionValue,
+    });
 
     setResults((prev) => [...prev, { ...captured, sequence: prev.length + 1 }]);
 
@@ -393,6 +438,67 @@ export default function BikeBuilderPage() {
       setLastSaveStatus('error');
       setLastSaveMessage(error instanceof Error ? error.message : String(error));
       console.error('[cpq/sampler] persist failed', { captured, error });
+    }
+  };
+
+  const saveCurrentConfiguration = async () => {
+    if (!state) {
+      setManualSaveStatus('error');
+      setManualSaveMessage('Load or build a configuration before saving.');
+      return;
+    }
+
+    setManualSaveStatus('saving');
+    setManualSaveMessage('Saving current configuration…');
+
+    const sourceDetailId = detailId || crypto.randomUUID();
+    const manualCaptured = buildCapturedConfiguration({
+      nextState: state,
+      activeDetailId: detailId,
+      baseDetailId: sourceDetailId,
+      sourceDetailId,
+      rawSnippet: extractRawSnippet(lastRawResponse),
+      traversalLevel: 0,
+      traversalPath: [],
+      parentPathKey: 'manual-root',
+      changedFeatureId: 'manual-save',
+      changedOptionId: 'manual-save',
+      changedOptionValue: 'manual',
+      source: 'manual-save',
+    });
+
+    try {
+      const res = await fetch('/api/cpq/sampler-result', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ipn_code: manualCaptured.ipn ?? null,
+          ruleset: manualCaptured.ruleset,
+          account_code: accountCode,
+          customer_id: customerId || null,
+          currency: currency || null,
+          language: language || null,
+          country_code: countryCode || null,
+          namespace: manualCaptured.namespace,
+          header_id: manualCaptured.headerId,
+          detail_id: manualCaptured.detailId,
+          session_id: manualCaptured.sessionId,
+          json_result: manualCaptured,
+        }),
+      });
+
+      if (!res.ok) {
+        const payload = (await res.json().catch(() => ({ error: 'Unknown persistence error' }))) as { error?: string };
+        throw new Error(payload.error ?? 'Unknown persistence error');
+      }
+
+      const timestamp = new Date().toISOString();
+      setManualSaveStatus('saved');
+      setManualSaveTimestamp(timestamp);
+      setManualSaveMessage(`Saved at ${new Date(timestamp).toLocaleString()}`);
+    } catch (error) {
+      setManualSaveStatus('error');
+      setManualSaveMessage(error instanceof Error ? error.message : String(error));
     }
   };
 
@@ -1092,6 +1198,15 @@ export default function BikeBuilderPage() {
               <div>
                 <strong>Session ID:</strong> {state?.sessionId ?? '-'}
               </div>
+            </div>
+            <div style={styles.summaryCard}>
+              <button style={styles.button} onClick={() => void saveCurrentConfiguration()} disabled={manualSaveStatus === 'saving' || !state}>
+                {manualSaveStatus === 'saving' ? 'Saving…' : 'Save Configuration'}
+              </button>
+              <div style={manualSaveStatus === 'error' ? styles.error : styles.tinyMuted}>
+                {manualSaveStatus === 'idle' ? 'Manual save is ready.' : manualSaveMessage}
+              </div>
+              {manualSaveTimestamp && <div style={styles.tinyMuted}>Last saved: {new Date(manualSaveTimestamp).toLocaleString()}</div>}
             </div>
 
             <h2 style={styles.sectionTitle}>Captured results</h2>

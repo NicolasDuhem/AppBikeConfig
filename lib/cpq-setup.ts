@@ -30,8 +30,6 @@ export type CpqImageManagementRecord = {
   feature_label: string;
   option_label: string;
   option_value: string;
-  feature_id: string | null;
-  option_id: string | null;
   picture_link: string | null;
   is_active: boolean;
   created_at: string;
@@ -197,7 +195,7 @@ export async function listImageManagementRows(filters: { featureLabel?: string; 
   const onlyMissingPicture = Boolean(filters.onlyMissingPicture);
 
   return (await sql`
-    select id, feature_label, option_label, option_value, feature_id, option_id, picture_link, is_active, created_at, updated_at
+    select id, feature_label, option_label, option_value, picture_link, is_active, created_at, updated_at
     from cpq_image_management
     where (${featureLabel} = '' or feature_label ilike ${`%${featureLabel}%`})
       and (not ${onlyMissingPicture} or picture_link is null or btrim(picture_link) = '')
@@ -214,58 +212,71 @@ export async function updateImageManagementRow(id: number, input: Record<string,
     set picture_link = ${pictureLink},
         is_active = ${isActive}
     where id = ${id}
-    returning id, feature_label, option_label, option_value, feature_id, option_id, picture_link, is_active, created_at, updated_at
+    returning id, feature_label, option_label, option_value, picture_link, is_active, created_at, updated_at
   `) as CpqImageManagementRecord[];
 
   return rows[0] ?? null;
 }
 
 export async function syncImageManagementFromSampler() {
-  const insertedRows = (await sql`
-    with distinct_options as (
-      select distinct
-        btrim(opt ->> 'featureLabel') as feature_label,
-        btrim(opt ->> 'optionLabel') as option_label,
-        btrim(opt ->> 'optionValue') as option_value,
-        nullif(btrim(opt ->> 'featureId'), '') as feature_id,
-        nullif(btrim(opt ->> 'optionId'), '') as option_id
-      from CPQ_sampler_result src
-      cross join lateral jsonb_array_elements(
-        case
-          when jsonb_typeof(src.json_result -> 'selectedOptions') = 'array' then src.json_result -> 'selectedOptions'
-          else '[]'::jsonb
-        end
-      ) as opt
-      where btrim(opt ->> 'featureLabel') <> ''
-        and btrim(opt ->> 'optionLabel') <> ''
-        and btrim(opt ->> 'optionValue') <> ''
-    ),
-    upserted as (
-      insert into cpq_image_management (feature_label, option_label, option_value, feature_id, option_id)
-      select feature_label, option_label, option_value, feature_id, option_id
-      from distinct_options
-      on conflict (feature_label, option_label, option_value) do update
-      set feature_id = coalesce(cpq_image_management.feature_id, excluded.feature_id),
-          option_id = coalesce(cpq_image_management.option_id, excluded.option_id)
-      where cpq_image_management.feature_id is null
-         or cpq_image_management.option_id is null
-      returning xmax = 0 as inserted
-    )
-    select inserted
-    from upserted
-  `) as Array<{ inserted: boolean }>;
+  const samplerRows = (await sql`
+    select id, json_result
+    from CPQ_sampler_result
+    order by id
+  `) as Array<{ id: number; json_result: unknown }>;
 
-  const rows = (await sql`
+  const distinctKeys = new Set<string>();
+  const distinctRows: Array<{ feature_label: string; option_label: string; option_value: string }> = [];
+  let selectedOptionsScanned = 0;
+
+  for (const row of samplerRows) {
+    if (!row.json_result || typeof row.json_result !== 'object') continue;
+    const payload = row.json_result as Record<string, unknown>;
+    const selectedOptions = payload.selectedOptions;
+    if (!Array.isArray(selectedOptions)) continue;
+
+    for (const entry of selectedOptions) {
+      selectedOptionsScanned += 1;
+      if (!entry || typeof entry !== 'object') continue;
+      const option = entry as Record<string, unknown>;
+
+      const featureLabel = asTrimmedText(option.featureLabel);
+      const optionLabel = asTrimmedText(option.optionLabel);
+      const optionValue = asTrimmedText(option.optionValue);
+      if (!featureLabel || !optionLabel || !optionValue) continue;
+
+      const key = `${featureLabel}\u0000${optionLabel}\u0000${optionValue}`;
+      if (distinctKeys.has(key)) continue;
+      distinctKeys.add(key);
+      distinctRows.push({ feature_label: featureLabel, option_label: optionLabel, option_value: optionValue });
+    }
+  }
+
+  let inserted = 0;
+  let skippedExisting = 0;
+  for (const row of distinctRows) {
+    const result = (await sql`
+      insert into cpq_image_management (feature_label, option_label, option_value)
+      values (${row.feature_label}, ${row.option_label}, ${row.option_value})
+      on conflict (feature_label, option_label, option_value) do nothing
+      returning id
+    `) as Array<{ id: number }>;
+
+    if (result.length > 0) inserted += 1;
+    else skippedExisting += 1;
+  }
+
+  const totalRows = (await sql`
     select count(*)::int as total
     from cpq_image_management
   `) as Array<{ total: number }>;
 
-  const inserted = insertedRows.filter((row) => row.inserted).length;
-  const updated = insertedRows.length - inserted;
-
   return {
+    sourceRowsScanned: samplerRows.length,
+    selectedOptionsScanned,
+    distinctCombinationsFound: distinctRows.length,
     inserted,
-    updated,
-    total: rows[0]?.total ?? 0,
+    skippedExisting,
+    total: totalRows[0]?.total ?? 0,
   };
 }
