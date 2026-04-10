@@ -36,6 +36,10 @@ export type StartConfigurationOverrides = {
   detailId?: string;
   profile?: string;
   instance?: string;
+  accountCode?: string;
+  customerId?: string;
+  currency?: string;
+  language?: string;
 };
 
 const requireEnv = (key: string): string => {
@@ -81,6 +85,10 @@ export const buildStartConfigurationPayload = (overrides?: StartConfigurationOve
   const detailId = overrides?.detailId ?? defaults.detailId;
   const profile = overrides?.profile ?? defaults.profile;
   const instance = overrides?.instance ?? defaults.instance;
+  const accountCode = overrides?.accountCode ?? defaults.company;
+  const customerId = overrides?.customerId;
+  const currency = overrides?.currency ?? defaults.currency;
+  const language = overrides?.language;
 
   return {
     inputParameters: {
@@ -105,8 +113,11 @@ export const buildStartConfigurationPayload = (overrides?: StartConfigurationOve
       },
       integrationParameters: [
         { name: 'AccountType', simpleValue: defaults.accountType, isNull: false, type: 'string' },
-        { name: 'CurrencyCode', simpleValue: defaults.currency, isNull: false, type: 'string' },
-        { name: 'Company', simpleValue: defaults.company, isNull: false, type: 'string' },
+        { name: 'CurrencyCode', simpleValue: currency, isNull: false, type: 'string' },
+        { name: 'Company', simpleValue: accountCode, isNull: false, type: 'string' },
+        { name: 'AccountCode', simpleValue: accountCode, isNull: false, type: 'string' },
+        ...(customerId ? [{ name: 'CustomerId', simpleValue: customerId, isNull: false as const, type: 'string' as const }] : []),
+        ...(language ? [{ name: 'LanguageCode', simpleValue: language, isNull: false as const, type: 'string' as const }] : []),
         { name: 'CustomerLocation', simpleValue: defaults.customerLocation, isNull: false, type: 'string' },
       ],
       rapidOptions: null,

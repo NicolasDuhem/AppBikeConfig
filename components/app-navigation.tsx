@@ -9,6 +9,8 @@ type NavLink = { href: string; label: string; hidden?: boolean };
 export default function AppNavigation() {
   const pathname = usePathname();
   const [links, setLinks] = useState<NavLink[]>([
+    { href: '/cpq', label: 'CPQ - Bike Builder' },
+    { href: '/cpq/setup', label: 'CPQ - Setup' },
     { href: '/cpq-matrix', label: 'Sales - SKU vs Country' },
     { href: '/sku-definition', label: 'Product - SKU definition' },
     { href: '/cpq-feature', label: 'Product - Create SKU' },
@@ -23,6 +25,8 @@ export default function AppNavigation() {
         const permissionList: string[] = data.permissions || [];
 
         setLinks([
+          { href: '/cpq', label: 'CPQ - Bike Builder' },
+          { href: '/cpq/setup', label: 'CPQ - Setup' },
           { href: '/cpq-matrix', label: 'Sales - SKU vs Country' },
           { href: '/sku-definition', label: 'Product - SKU definition' },
           { href: '/cpq-feature', label: 'Product - Create SKU' },

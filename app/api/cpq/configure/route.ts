@@ -3,23 +3,16 @@ import { configureConfiguration } from '../../../../lib/cpq/client';
 import { mapCpqToNormalizedState } from '../../../../lib/cpq/mappers';
 import { mockConfigureState, mockInitState } from '../../../../lib/cpq/mock-data';
 import { BikeBuilderContext, ConfigureConfiguratorRequest, NormalizedBikeBuilderState } from '../../../../lib/cpq/types';
-
-const defaultContext: BikeBuilderContext = {
-  accountCode: process.env.CPQ_DEFAULT_ACCOUNT_CODE ?? 'A000',
-  currency: process.env.CPQ_DEFAULT_CURRENCY ?? 'GBP',
-  language: process.env.CPQ_DEFAULT_LANGUAGE ?? 'en-GB',
-};
-
 const buildContext = (input?: Partial<BikeBuilderContext>) => ({
-  accountCode: input?.accountCode ?? defaultContext.accountCode,
-  customerId: input?.customerId ?? process.env.CPQ_DEFAULT_CUSTOMER_ID,
-  currency: input?.currency ?? defaultContext.currency,
-  language: input?.language ?? defaultContext.language,
+  accountCode: input?.accountCode ?? '',
+  customerId: input?.customerId,
+  currency: input?.currency,
+  language: input?.language,
 });
 
 export async function POST(req: NextRequest) {
   const body = (await req.json()) as ConfigureConfiguratorRequest & { currentState?: NormalizedBikeBuilderState };
-  const ruleset = body.ruleset ?? process.env.NEXT_PUBLIC_CPQ_RULESET ?? 'BBLV6_G-LineMY26';
+  const ruleset = body.ruleset ?? process.env.CPQ_PART_NAME ?? 'BBLV6_G-LineMY26';
   const baseUrl = (
     process.env.CPQ_BASE_URL ?? 'https://configurator.eu1.inforcloudsuite.com/api/v4/ProductConfiguratorUI.svc/json'
   ).replace(/\/$/, '');

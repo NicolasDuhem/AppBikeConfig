@@ -1,6 +1,6 @@
 'use client';
 
-import { CSSProperties, useMemo, useRef, useState } from 'react';
+import { CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
 import { BikeBuilderFeatureOption, NormalizedBikeBuilderState } from '../../lib/cpq/types';
 
 type RequestState = {
@@ -28,6 +28,22 @@ type RulesetTarget = {
   namespace: string;
   partName: string;
   headerId: string;
+};
+
+type AccountContextRecord = {
+  id: number;
+  account_code: string;
+  customer_id: string;
+  currency: string;
+  language: string;
+};
+
+type RulesetRecord = {
+  id: number;
+  cpq_ruleset: string;
+  namespace: string;
+  header_id: string;
+  description?: string | null;
 };
 
 type CapturedOption = {
@@ -77,23 +93,22 @@ type TraversalStep = {
   optionValue?: string;
 };
 
-const fallbackPart = process.env.NEXT_PUBLIC_CPQ_PART_NAME ?? process.env.NEXT_PUBLIC_CPQ_RULESET ?? 'BROMPTON_BIKE_BUILDER';
-const fallbackNamespace = process.env.NEXT_PUBLIC_CPQ_NAMESPACE ?? 'Default';
-const fallbackHeaderId = process.env.NEXT_PUBLIC_CPQ_HEADER_ID ?? 'Simulator';
-
-const presets: RulesetTarget[] = [
-  {
-    label: 'Default preset',
-    ruleset: fallbackPart,
-    namespace: fallbackNamespace,
-    partName: fallbackPart,
-    headerId: fallbackHeaderId,
-  },
-];
+const fallbackTarget: RulesetTarget = {
+  label: 'Fallback',
+  ruleset: 'BROMPTON_BIKE_BUILDER',
+  namespace: 'Default',
+  partName: 'BROMPTON_BIKE_BUILDER',
+  headerId: 'Simulator',
+};
 
 export default function BikeBuilderPage() {
-  const [target, setTarget] = useState<RulesetTarget>(presets[0]);
-  const [accountCode, setAccountCode] = useState('A000');
+  const [target, setTarget] = useState<RulesetTarget>(fallbackTarget);
+  const [accountContexts, setAccountContexts] = useState<AccountContextRecord[]>([]);
+  const [rulesets, setRulesets] = useState<RulesetRecord[]>([]);
+  const [accountCode, setAccountCode] = useState('');
+  const [customerId, setCustomerId] = useState('');
+  const [currency, setCurrency] = useState('');
+  const [language, setLanguage] = useState('');
   const [detailId, setDetailId] = useState(() => crypto.randomUUID());
   const [state, setState] = useState<NormalizedBikeBuilderState | null>(null);
   const [requestState, setRequestState] = useState<RequestState>({ loading: false });
@@ -135,6 +150,47 @@ export default function BikeBuilderPage() {
   const [trimSessionIdBeforeConfigure, setTrimSessionIdBeforeConfigure] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [expandedResultKeys, setExpandedResultKeys] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    const loadSetup = async () => {
+      try {
+        const [accountRes, rulesetRes] = await Promise.all([
+          fetch('/api/cpq/setup/account-context?activeOnly=true'),
+          fetch('/api/cpq/setup/rulesets?activeOnly=true'),
+        ]);
+        const accountPayload = (await accountRes.json().catch(() => ({ rows: [] }))) as { rows?: AccountContextRecord[] };
+        const rulesetPayload = (await rulesetRes.json().catch(() => ({ rows: [] }))) as { rows?: RulesetRecord[] };
+
+        const nextAccounts = accountPayload.rows ?? [];
+        const nextRulesets = rulesetPayload.rows ?? [];
+        setAccountContexts(nextAccounts);
+        setRulesets(nextRulesets);
+
+        const firstAccount = nextAccounts[0];
+        if (firstAccount) {
+          setAccountCode(firstAccount.account_code);
+          setCustomerId(firstAccount.customer_id);
+          setCurrency(firstAccount.currency);
+          setLanguage(firstAccount.language);
+        }
+
+        const firstRuleset = nextRulesets[0];
+        if (firstRuleset) {
+          setTarget({
+            label: firstRuleset.cpq_ruleset,
+            ruleset: firstRuleset.cpq_ruleset,
+            partName: firstRuleset.cpq_ruleset,
+            namespace: firstRuleset.namespace,
+            headerId: firstRuleset.header_id,
+          });
+        }
+      } catch {
+        setRequestState({ loading: false, error: 'Failed to load CPQ setup data. Check /cpq/setup entries.' });
+      }
+    };
+
+    void loadSetup();
+  }, []);
 
   const traversalControlRef = useRef({ stop: false, pause: false });
   const runStartRef = useRef<number | null>(null);
@@ -303,7 +359,7 @@ export default function BikeBuilderPage() {
       partName: nextTarget.partName,
       headerId: nextTarget.headerId,
       detailId: freshDetailId,
-      context: { accountCode },
+      context: { accountCode, customerId, currency, language },
     };
 
     const res = await fetch('/api/cpq/init', {
@@ -339,14 +395,31 @@ export default function BikeBuilderPage() {
     return payload;
   };
 
-  const onRulesetChange = async (nextRuleset: string) => {
-    const nextTarget = { ...target, ruleset: nextRuleset, partName: nextRuleset };
+  const onRulesetChange = async (nextRulesetId: string) => {
+    const picked = rulesets.find((item) => String(item.id) === nextRulesetId);
+    if (!picked) return;
+    const nextTarget = {
+      label: picked.cpq_ruleset,
+      ruleset: picked.cpq_ruleset,
+      partName: picked.cpq_ruleset,
+      namespace: picked.namespace,
+      headerId: picked.header_id,
+    };
     setTarget(nextTarget);
     try {
       await startFreshConfiguration(nextTarget, crypto.randomUUID());
     } catch {
       // handled above
     }
+  };
+
+  const onAccountCodeChange = (nextAccountCode: string) => {
+    const picked = accountContexts.find((item) => item.account_code === nextAccountCode);
+    setAccountCode(nextAccountCode);
+    if (!picked) return;
+    setCustomerId(picked.customer_id);
+    setCurrency(picked.currency);
+    setLanguage(picked.language);
   };
 
   const configureSelection = async ({
@@ -372,7 +445,7 @@ export default function BikeBuilderPage() {
       optionId,
       optionValue,
       trimSessionIdBeforeConfigure,
-      context: { accountCode },
+      context: { accountCode, customerId, currency, language },
     };
 
     const res = await fetch('/api/cpq/configure', {
@@ -680,8 +753,30 @@ export default function BikeBuilderPage() {
         <section style={styles.topBar}>
           <div style={styles.topGrid}>
             <label style={styles.label}>
+              Account code
+              <select value={accountCode} onChange={(e) => onAccountCodeChange(e.target.value)} style={styles.select}>
+                {!accountContexts.length && <option value="">No active accounts</option>}
+                {accountContexts.map((item) => (
+                  <option key={item.id} value={item.account_code}>
+                    {item.account_code}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label style={styles.label}>
               Ruleset
-              <input value={target.ruleset} onChange={(e) => onRulesetChange(e.target.value)} style={styles.input} />
+              <select
+                value={String(rulesets.find((item) => item.cpq_ruleset === target.ruleset)?.id ?? '')}
+                onChange={(e) => void onRulesetChange(e.target.value)}
+                style={styles.select}
+              >
+                {!rulesets.length && <option value="">No active rulesets</option>}
+                {rulesets.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.cpq_ruleset}
+                  </option>
+                ))}
+              </select>
             </label>
             <label style={styles.label}>
               Namespace
@@ -690,10 +785,6 @@ export default function BikeBuilderPage() {
             <label style={styles.label}>
               Header ID
               <input value={target.headerId} onChange={(e) => setTarget({ ...target, headerId: e.target.value })} style={styles.input} />
-            </label>
-            <label style={styles.label}>
-              Account
-              <input value={accountCode} onChange={(e) => setAccountCode(e.target.value)} style={styles.input} />
             </label>
           </div>
           <div style={styles.topActions}>
@@ -844,6 +935,18 @@ export default function BikeBuilderPage() {
                 <strong>Ruleset:</strong> {target.ruleset}
               </div>
               <div>
+                <strong>Account Code:</strong> {accountCode || '-'}
+              </div>
+              <div>
+                <strong>Customer ID:</strong> {customerId || '-'}
+              </div>
+              <div>
+                <strong>Currency:</strong> {currency || '-'}
+              </div>
+              <div>
+                <strong>Language:</strong> {language || '-'}
+              </div>
+              <div>
                 <strong>Namespace:</strong> {target.namespace}
               </div>
               <div>
@@ -963,8 +1066,8 @@ function extractRawSnippet(rawResponse: unknown) {
 }
 
 const styles: Record<string, CSSProperties> = {
-  page: { fontFamily: 'Inter, Arial, sans-serif', background: '#f6f7fb', minHeight: '100vh', padding: 16 },
-  container: { maxWidth: 1360, margin: '0 auto', display: 'grid', gap: 12 },
+  page: { fontFamily: 'Inter, Arial, sans-serif', background: '#f6f7fb', minHeight: 0, padding: 16, overflowY: 'auto', overflowX: 'hidden' },
+  container: { maxWidth: 1360, margin: '0 auto', display: 'grid', gap: 12, minWidth: 0 },
   heading: { margin: '6px 0 8px', fontSize: 24 },
   topBar: { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12, boxShadow: '0 1px 6px rgba(0,0,0,0.05)' },
   topGrid: { display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' },
@@ -990,9 +1093,9 @@ const styles: Record<string, CSSProperties> = {
     padding: '8px 10px',
   },
   statusRow: { display: 'flex', gap: 8, flexWrap: 'wrap' },
-  layout: { display: 'grid', gap: 12, gridTemplateColumns: 'minmax(360px, 1fr) minmax(360px, 480px)' },
-  leftColumn: { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12, display: 'grid', gap: 8 },
-  rightColumn: { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12, display: 'grid', gap: 8, alignContent: 'start' },
+  layout: { display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(min(360px, 100%), 1fr))', minWidth: 0 },
+  leftColumn: { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12, display: 'grid', gap: 8, minWidth: 0 },
+  rightColumn: { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12, display: 'grid', gap: 8, alignContent: 'start', minWidth: 0 },
   sectionTitle: { margin: '0 0 4px', fontSize: 16 },
   featureCard: { border: '1px solid #ebedf0', borderRadius: 10, padding: 8, display: 'grid', gap: 6, background: '#fcfcfd' },
   featureHeader: { fontSize: 13, fontWeight: 600, color: '#111827' },
