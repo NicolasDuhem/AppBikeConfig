@@ -3,8 +3,6 @@ create table if not exists cpq_image_management (
   feature_label text not null,
   option_label text not null,
   option_value text not null,
-  feature_id text,
-  option_id text,
   picture_link text,
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
