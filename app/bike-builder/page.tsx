@@ -8,6 +8,23 @@ type RequestState = {
   error?: string;
 };
 
+type SelectedOptionLookup = {
+  featureLabel: string;
+  optionLabel: string;
+  optionValue: string;
+};
+
+type ResolvedImageLayer = SelectedOptionLookup & {
+  slot: 1 | 2 | 3 | 4;
+  pictureLink: string;
+};
+
+type ImageLayerResolution = {
+  layers: ResolvedImageLayer[];
+  matchedSelections: SelectedOptionLookup[];
+  unmatchedSelections: SelectedOptionLookup[];
+};
+
 type CallType = 'StartConfiguration' | 'Configure';
 type TraversalMode = 'sampler' | 'ui-hierarchical';
 type TraversalStatus = 'idle' | 'running' | 'paused' | 'stopped' | 'completed';
@@ -150,6 +167,13 @@ export default function BikeBuilderPage() {
   const [lastPreviousFeatureCurrentValue, setLastPreviousFeatureCurrentValue] = useState<string>('');
   const [lastRequestedOptionValue, setLastRequestedOptionValue] = useState<string>('');
   const [lastReturnedFeatureCurrentValue, setLastReturnedFeatureCurrentValue] = useState<string>('');
+  const [imageLayers, setImageLayers] = useState<ResolvedImageLayer[]>([]);
+  const [imageLayersLoading, setImageLayersLoading] = useState(false);
+  const [imageLayersError, setImageLayersError] = useState<string>('');
+  const [imageLayerDebug, setImageLayerDebug] = useState<Omit<ImageLayerResolution, 'layers'>>({
+    matchedSelections: [],
+    unmatchedSelections: [],
+  });
 
   const [traversalStatus, setTraversalStatus] = useState<TraversalStatus>('idle');
   const [activeMode, setActiveMode] = useState<TraversalMode | null>(null);
@@ -231,11 +255,72 @@ export default function BikeBuilderPage() {
 
   const visibleFeatures = state?.features ?? [];
   const hasFeatures = visibleFeatures.length > 0;
+  const selectedOptionsForImageLookup = useMemo<SelectedOptionLookup[]>(() => {
+    if (!state) return [];
+    return state.features
+      .filter((feature) => feature.selectedOptionId)
+      .map((feature) => {
+        const selected = feature.availableOptions.find((option) => option.optionId === feature.selectedOptionId);
+        return {
+          featureLabel: String(feature.featureLabel ?? '').trim(),
+          optionLabel: String(selected?.label ?? feature.selectedOptionId ?? '').trim(),
+          optionValue: String(selected?.value ?? feature.selectedValue ?? '').trim(),
+        };
+      })
+      .filter((selection) => selection.featureLabel && selection.optionLabel && selection.optionValue);
+  }, [state]);
+  const selectedOptionsForImageLookupSignature = useMemo(
+    () => selectedOptionsForImageLookup.map((item) => `${item.featureLabel}|${item.optionLabel}|${item.optionValue}`).join('||'),
+    [selectedOptionsForImageLookup],
+  );
 
   const summaryPrice = useMemo(() => {
     if (state?.configuredPrice === undefined) return '-';
     return state.configuredPrice.toLocaleString(undefined, { style: 'currency', currency: 'GBP' });
   }, [state?.configuredPrice]);
+
+  useEffect(() => {
+    if (!state?.sessionId) {
+      setImageLayers([]);
+      setImageLayersError('');
+      setImageLayersLoading(false);
+      setImageLayerDebug({ matchedSelections: [], unmatchedSelections: [] });
+      return;
+    }
+
+    const controller = new AbortController();
+    const resolveImageLayers = async () => {
+      setImageLayersLoading(true);
+      setImageLayersError('');
+      try {
+        const res = await fetch('/api/cpq/image-layers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ selectedOptions: selectedOptionsForImageLookup }),
+          signal: controller.signal,
+        });
+        const payload = (await res.json().catch(() => ({}))) as Partial<ImageLayerResolution> & { error?: string };
+        if (!res.ok) {
+          throw new Error(payload.error ?? 'Failed to resolve image layers');
+        }
+        setImageLayers(Array.isArray(payload.layers) ? payload.layers : []);
+        setImageLayerDebug({
+          matchedSelections: Array.isArray(payload.matchedSelections) ? payload.matchedSelections : [],
+          unmatchedSelections: Array.isArray(payload.unmatchedSelections) ? payload.unmatchedSelections : [],
+        });
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setImageLayers([]);
+        setImageLayerDebug({ matchedSelections: [], unmatchedSelections: [] });
+        setImageLayersError(error instanceof Error ? error.message : String(error));
+      } finally {
+        if (!controller.signal.aborted) setImageLayersLoading(false);
+      }
+    };
+
+    void resolveImageLayers();
+    return () => controller.abort();
+  }, [state?.sessionId, selectedOptionsForImageLookup, selectedOptionsForImageLookupSignature]);
 
   const updateElapsed = () => {
     if (!runStartRef.current) return;
@@ -1157,6 +1242,37 @@ export default function BikeBuilderPage() {
           </div>
 
           <aside style={styles.rightColumn}>
+            <h2 style={styles.sectionTitle}>Bike preview</h2>
+            <div style={styles.previewCard}>
+              <div style={styles.previewBox}>
+                {imageLayers.map((layer, index) => (
+                  <img
+                    key={`${layer.featureLabel}-${layer.optionLabel}-${layer.optionValue}-${layer.slot}-${index}`}
+                    src={layer.pictureLink}
+                    alt={`${layer.featureLabel} / ${layer.optionLabel} / ${layer.optionValue} layer ${layer.slot}`}
+                    style={styles.previewLayer}
+                  />
+                ))}
+                {!imageLayersLoading && !imageLayers.length && (
+                  <div style={styles.previewPlaceholder}>No image layers available</div>
+                )}
+              </div>
+              <div style={styles.tinyMuted}>
+                {imageLayersLoading ? 'Resolving image layers…' : `Layers: ${imageLayers.length}`}
+              </div>
+              {imageLayersError ? <div style={styles.error}>Image preview error: {imageLayersError}</div> : null}
+              {debugOpen && (
+                <div style={styles.imageDebugCard}>
+                  <div>
+                    <strong>Matched options:</strong> {imageLayerDebug.matchedSelections.length}
+                  </div>
+                  <div>
+                    <strong>No-image options:</strong> {imageLayerDebug.unmatchedSelections.length}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <h2 style={styles.sectionTitle}>Summary</h2>
             <div style={styles.summaryCard}>
               <div>
@@ -1359,6 +1475,45 @@ const styles: Record<string, CSSProperties> = {
   leftColumn: { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12, display: 'grid', gap: 8, minWidth: 0 },
   rightColumn: { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12, display: 'grid', gap: 8, alignContent: 'start', minWidth: 0 },
   sectionTitle: { margin: '0 0 4px', fontSize: 16 },
+  previewCard: { border: '1px solid #ebedf0', borderRadius: 10, padding: 10, display: 'grid', gap: 8 },
+  previewBox: {
+    width: '100%',
+    maxWidth: 340,
+    aspectRatio: '1 / 1',
+    border: '1px dashed #d1d5db',
+    borderRadius: 8,
+    background: '#f9fafb',
+    position: 'relative',
+    overflow: 'hidden',
+    justifySelf: 'center',
+  },
+  previewLayer: {
+    position: 'absolute',
+    inset: 0,
+    width: '100%',
+    height: '100%',
+    objectFit: 'contain',
+    pointerEvents: 'none',
+  },
+  previewPlaceholder: {
+    position: 'absolute',
+    inset: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#6b7280',
+    fontSize: 13,
+    textAlign: 'center',
+    padding: 12,
+  },
+  imageDebugCard: {
+    border: '1px solid #ebedf0',
+    borderRadius: 8,
+    padding: 8,
+    fontSize: 12,
+    display: 'grid',
+    gap: 4,
+  },
   featureCard: { border: '1px solid #ebedf0', borderRadius: 10, padding: 8, display: 'grid', gap: 6, background: '#fcfcfd' },
   featureHeader: { fontSize: 13, fontWeight: 600, color: '#111827' },
   select: { width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, background: '#fff' },
