@@ -13,7 +13,13 @@ export async function POST(request: NextRequest) {
           ? createDetailId()
           : undefined;
 
-    const debug = await startConfigurationSmokeDebug(requestedDetailId);
+    const debug = await startConfigurationSmokeDebug(
+      requestedDetailId
+        ? {
+            detailId: requestedDetailId,
+          }
+        : undefined,
+    );
 
     return NextResponse.json({
       ok: debug.responseDebug.ok,
