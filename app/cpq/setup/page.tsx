@@ -23,7 +23,18 @@ type Ruleset = {
   is_active: boolean;
 };
 
-type TabKey = 'accounts' | 'rulesets';
+type ImageManagementRow = {
+  id: number;
+  feature_label: string;
+  option_label: string;
+  option_value: string;
+  feature_id: string | null;
+  option_id: string | null;
+  picture_link: string | null;
+  is_active: boolean;
+};
+
+type TabKey = 'accounts' | 'rulesets' | 'pictures';
 
 const emptyAccount: Omit<AccountContext, 'id'> = {
   account_code: '',
@@ -48,11 +59,16 @@ export default function CpqSetupPage() {
   const [tab, setTab] = useState<TabKey>('accounts');
   const [accounts, setAccounts] = useState<AccountContext[]>([]);
   const [rulesets, setRulesets] = useState<Ruleset[]>([]);
+  const [imageRows, setImageRows] = useState<ImageManagementRow[]>([]);
   const [accountDraft, setAccountDraft] = useState(emptyAccount);
   const [rulesetDraft, setRulesetDraft] = useState(emptyRuleset);
   const [editingAccountId, setEditingAccountId] = useState<number | null>(null);
   const [editingRulesetId, setEditingRulesetId] = useState<number | null>(null);
   const [status, setStatus] = useState('');
+  const [featureFilter, setFeatureFilter] = useState('');
+  const [onlyMissingPicture, setOnlyMissingPicture] = useState(false);
+  const [savingImageId, setSavingImageId] = useState<number | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   const canSubmitAccount = useMemo(
     () =>
@@ -64,7 +80,10 @@ export default function CpqSetupPage() {
     [accountDraft],
   );
 
-  const canSubmitRuleset = useMemo(() => !!rulesetDraft.cpq_ruleset.trim() && !!rulesetDraft.namespace.trim() && !!rulesetDraft.header_id.trim(), [rulesetDraft]);
+  const canSubmitRuleset = useMemo(
+    () => !!rulesetDraft.cpq_ruleset.trim() && !!rulesetDraft.namespace.trim() && !!rulesetDraft.header_id.trim(),
+    [rulesetDraft],
+  );
 
   const load = async () => {
     const [accountRes, rulesetRes] = await Promise.all([
@@ -79,9 +98,23 @@ export default function CpqSetupPage() {
     setRulesets(rulesetPayload.rows || []);
   };
 
+  const loadPictures = async () => {
+    const params = new URLSearchParams();
+    if (featureFilter.trim()) params.set('featureLabel', featureFilter.trim());
+    if (onlyMissingPicture) params.set('onlyMissingPicture', 'true');
+
+    const res = await fetch(`/api/cpq/setup/picture-management?${params.toString()}`);
+    const payload = await res.json().catch(() => ({ rows: [] }));
+    setImageRows(payload.rows || []);
+  };
+
   useEffect(() => {
     void load();
   }, []);
+
+  useEffect(() => {
+    void loadPictures();
+  }, [featureFilter, onlyMissingPicture]);
 
   const resetAccountDraft = () => {
     setEditingAccountId(null);
@@ -175,14 +208,51 @@ export default function CpqSetupPage() {
     await load();
   };
 
+  const savePictureRow = async (id: number, patch: Partial<Pick<ImageManagementRow, 'picture_link' | 'is_active'>>) => {
+    setSavingImageId(id);
+    const res = await fetch(`/api/cpq/setup/picture-management/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setStatus(payload.error || 'Failed to update picture mapping');
+      setSavingImageId(null);
+      return;
+    }
+
+    setImageRows((curr) => curr.map((row) => (row.id === id ? payload.row : row)));
+    setStatus('Picture mapping updated.');
+    setSavingImageId(null);
+  };
+
+  const syncPictures = async () => {
+    setSyncing(true);
+    const res = await fetch('/api/cpq/setup/picture-management/sync', { method: 'POST' });
+    const payload = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      setStatus(payload.error || 'Failed to sync from sampler results');
+      setSyncing(false);
+      return;
+    }
+
+    const summary = payload.summary || {};
+    setStatus(`Sync complete. Inserted ${summary.inserted ?? 0}, updated IDs ${summary.updated ?? 0}, total rows ${summary.total ?? 0}.`);
+    await loadPictures();
+    setSyncing(false);
+  };
+
   return (
     <main className="pageRoot">
       <section className="pageHeader compactCard">
         <h1>CPQ Setup</h1>
-        <p>Manage account context defaults and CPQ rulesets stored in Neon.</p>
+        <p>Manage account context defaults, CPQ rulesets, and picture-management option mappings stored in Neon.</p>
         <div className="tabRow">
           <button className={tab === 'accounts' ? 'primary' : ''} onClick={() => setTab('accounts')}>Account code management</button>
           <button className={tab === 'rulesets' ? 'primary' : ''} onClick={() => setTab('rulesets')}>Ruleset management</button>
+          <button className={tab === 'pictures' ? 'primary' : ''} onClick={() => setTab('pictures')}>Picture management</button>
         </div>
         {status && <div className="note compactNote">{status}</div>}
       </section>
@@ -291,6 +361,81 @@ export default function CpqSetupPage() {
                     </td>
                   </tr>
                 ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {tab === 'pictures' && (
+        <section className="compactCard compactSection">
+          <div className="toolbar compactToolbar">
+            <button className="primary" onClick={() => void syncPictures()} disabled={syncing}>{syncing ? 'Syncing…' : 'Sync from sampler results'}</button>
+            <label style={{ display: 'grid', gap: 4, minWidth: 240 }}>
+              Feature label search
+              <input value={featureFilter} onChange={(e) => setFeatureFilter(e.target.value)} placeholder="Filter by feature label" />
+            </label>
+            <label className="inlineCheck" style={{ marginBottom: 0 }}>
+              <input type="checkbox" checked={onlyMissingPicture} onChange={(e) => setOnlyMissingPicture(e.target.checked)} />
+              Missing picture link only
+            </label>
+          </div>
+
+          <div className="tableWrap" style={{ maxHeight: 520 }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Feature label</th>
+                  <th>Option label</th>
+                  <th>Option value</th>
+                  <th>Feature ID</th>
+                  <th>Option ID</th>
+                  <th>Picture link</th>
+                  <th>Active</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {imageRows.map((row) => (
+                  <tr key={row.id}>
+                    <td>{row.feature_label}</td>
+                    <td>{row.option_label}</td>
+                    <td>{row.option_value}</td>
+                    <td>{row.feature_id ?? '-'}</td>
+                    <td>{row.option_id ?? '-'}</td>
+                    <td style={{ minWidth: 320 }}>
+                      <input
+                        style={{ width: '100%' }}
+                        value={row.picture_link ?? ''}
+                        placeholder="https://cdn.example.com/layer.png"
+                        onChange={(e) => {
+                          const pictureLink = e.target.value;
+                          setImageRows((curr) => curr.map((item) => (item.id === row.id ? { ...item, picture_link: pictureLink } : item)));
+                        }}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={row.is_active}
+                        onChange={(e) => {
+                          const isActive = e.target.checked;
+                          setImageRows((curr) => curr.map((item) => (item.id === row.id ? { ...item, is_active: isActive } : item)));
+                        }}
+                      />
+                    </td>
+                    <td>
+                      <button disabled={savingImageId === row.id} onClick={() => void savePictureRow(row.id, { picture_link: row.picture_link, is_active: row.is_active })}>
+                        {savingImageId === row.id ? 'Saving…' : 'Save'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {imageRows.length === 0 && (
+                  <tr>
+                    <td colSpan={8}>No picture-management rows found. Run sync to seed from sampler results.</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
