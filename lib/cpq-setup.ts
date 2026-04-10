@@ -30,7 +30,10 @@ export type CpqImageManagementRecord = {
   feature_label: string;
   option_label: string;
   option_value: string;
-  picture_link: string | null;
+  picture_link_1: string | null;
+  picture_link_2: string | null;
+  picture_link_3: string | null;
+  picture_link_4: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -195,24 +198,60 @@ export async function listImageManagementRows(filters: { featureLabel?: string; 
   const onlyMissingPicture = Boolean(filters.onlyMissingPicture);
 
   return (await sql`
-    select id, feature_label, option_label, option_value, picture_link, is_active, created_at, updated_at
+    select
+      id,
+      feature_label,
+      option_label,
+      option_value,
+      picture_link_1,
+      picture_link_2,
+      picture_link_3,
+      picture_link_4,
+      is_active,
+      created_at,
+      updated_at
     from cpq_image_management
     where (${featureLabel} = '' or feature_label ilike ${`%${featureLabel}%`})
-      and (not ${onlyMissingPicture} or picture_link is null or btrim(picture_link) = '')
+      and (
+        not ${onlyMissingPicture}
+        or (
+          (picture_link_1 is null or btrim(picture_link_1) = '')
+          and (picture_link_2 is null or btrim(picture_link_2) = '')
+          and (picture_link_3 is null or btrim(picture_link_3) = '')
+          and (picture_link_4 is null or btrim(picture_link_4) = '')
+        )
+      )
     order by feature_label, option_label, option_value
   `) as CpqImageManagementRecord[];
 }
 
 export async function updateImageManagementRow(id: number, input: Record<string, unknown>) {
-  const pictureLink = asNullableTrimmedText(input.picture_link);
+  const pictureLink1 = asNullableTrimmedText(input.picture_link_1);
+  const pictureLink2 = asNullableTrimmedText(input.picture_link_2);
+  const pictureLink3 = asNullableTrimmedText(input.picture_link_3);
+  const pictureLink4 = asNullableTrimmedText(input.picture_link_4);
   const isActive = parseBoolean(input.is_active, true);
 
   const rows = (await sql`
     update cpq_image_management
-    set picture_link = ${pictureLink},
+    set picture_link_1 = ${pictureLink1},
+        picture_link_2 = ${pictureLink2},
+        picture_link_3 = ${pictureLink3},
+        picture_link_4 = ${pictureLink4},
         is_active = ${isActive}
     where id = ${id}
-    returning id, feature_label, option_label, option_value, picture_link, is_active, created_at, updated_at
+    returning
+      id,
+      feature_label,
+      option_label,
+      option_value,
+      picture_link_1,
+      picture_link_2,
+      picture_link_3,
+      picture_link_4,
+      is_active,
+      created_at,
+      updated_at
   `) as CpqImageManagementRecord[];
 
   return rows[0] ?? null;
@@ -222,33 +261,51 @@ export async function syncImageManagementFromSampler() {
   const samplerRows = (await sql`
     select id, json_result
     from CPQ_sampler_result
+    where processed_for_image_sync = false
     order by id
   `) as Array<{ id: number; json_result: unknown }>;
 
   const distinctKeys = new Set<string>();
   const distinctRows: Array<{ feature_label: string; option_label: string; option_value: string }> = [];
   let selectedOptionsScanned = 0;
+  const syncErrors: string[] = [];
+  let samplerRowsMarkedProcessed = 0;
 
   for (const row of samplerRows) {
-    if (!row.json_result || typeof row.json_result !== 'object') continue;
-    const payload = row.json_result as Record<string, unknown>;
-    const selectedOptions = payload.selectedOptions;
-    if (!Array.isArray(selectedOptions)) continue;
+    try {
+      if (row.json_result && typeof row.json_result === 'object') {
+        const payload = row.json_result as Record<string, unknown>;
+        const selectedOptions = payload.selectedOptions;
+        if (Array.isArray(selectedOptions)) {
+          for (const entry of selectedOptions) {
+            selectedOptionsScanned += 1;
+            if (!entry || typeof entry !== 'object') continue;
+            const option = entry as Record<string, unknown>;
 
-    for (const entry of selectedOptions) {
-      selectedOptionsScanned += 1;
-      if (!entry || typeof entry !== 'object') continue;
-      const option = entry as Record<string, unknown>;
+            const featureLabel = asTrimmedText(option.featureLabel);
+            const optionLabel = asTrimmedText(option.optionLabel);
+            const optionValue = asTrimmedText(option.optionValue);
+            if (!featureLabel || !optionLabel || !optionValue) continue;
 
-      const featureLabel = asTrimmedText(option.featureLabel);
-      const optionLabel = asTrimmedText(option.optionLabel);
-      const optionValue = asTrimmedText(option.optionValue);
-      if (!featureLabel || !optionLabel || !optionValue) continue;
+            const key = `${featureLabel}\u0000${optionLabel}\u0000${optionValue}`;
+            if (distinctKeys.has(key)) continue;
+            distinctKeys.add(key);
+            distinctRows.push({ feature_label: featureLabel, option_label: optionLabel, option_value: optionValue });
+          }
+        }
+      }
 
-      const key = `${featureLabel}\u0000${optionLabel}\u0000${optionValue}`;
-      if (distinctKeys.has(key)) continue;
-      distinctKeys.add(key);
-      distinctRows.push({ feature_label: featureLabel, option_label: optionLabel, option_value: optionValue });
+      const processed = (await sql`
+        update CPQ_sampler_result
+        set processed_for_image_sync = true,
+            processed_for_image_sync_at = now()
+        where id = ${row.id}
+          and processed_for_image_sync = false
+        returning id
+      `) as Array<{ id: number }>;
+      if (processed.length > 0) samplerRowsMarkedProcessed += 1;
+    } catch (error) {
+      syncErrors.push(`sampler row ${row.id}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -271,12 +328,21 @@ export async function syncImageManagementFromSampler() {
     from cpq_image_management
   `) as Array<{ total: number }>;
 
+  const unprocessedRemainingRows = (await sql`
+    select count(*)::int as total
+    from CPQ_sampler_result
+    where processed_for_image_sync = false
+  `) as Array<{ total: number }>;
+
   return {
     sourceRowsScanned: samplerRows.length,
     selectedOptionsScanned,
     distinctCombinationsFound: distinctRows.length,
     inserted,
     skippedExisting,
+    samplerRowsMarkedProcessed,
+    syncErrors,
+    unprocessedRowsRemaining: unprocessedRemainingRows[0]?.total ?? 0,
     total: totalRows[0]?.total ?? 0,
   };
 }

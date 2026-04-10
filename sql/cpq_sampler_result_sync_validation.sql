@@ -1,6 +1,7 @@
 -- Manual validation query for sampler-source extraction logic used by picture-management sync.
 select
   count(*)::int as sampler_rows,
+  count(*) filter (where processed_for_image_sync = false)::int as unprocessed_sampler_rows,
   coalesce(sum(case when jsonb_typeof(json_result -> 'selectedOptions') = 'array' then jsonb_array_length(json_result -> 'selectedOptions') else 0 end), 0)::int as selected_options_entries
 from CPQ_sampler_result;
 

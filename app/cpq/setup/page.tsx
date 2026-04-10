@@ -28,7 +28,10 @@ type ImageManagementRow = {
   feature_label: string;
   option_label: string;
   option_value: string;
-  picture_link: string | null;
+  picture_link_1: string | null;
+  picture_link_2: string | null;
+  picture_link_3: string | null;
+  picture_link_4: string | null;
   is_active: boolean;
 };
 
@@ -38,6 +41,9 @@ type SyncSummary = {
   distinctCombinationsFound: number;
   inserted: number;
   skippedExisting: number;
+  samplerRowsMarkedProcessed: number;
+  unprocessedRowsRemaining: number;
+  syncErrors: string[];
   total: number;
 };
 
@@ -216,7 +222,10 @@ export default function CpqSetupPage() {
     await load();
   };
 
-  const savePictureRow = async (id: number, patch: Partial<Pick<ImageManagementRow, 'picture_link' | 'is_active'>>) => {
+  const savePictureRow = async (
+    id: number,
+    patch: Partial<Pick<ImageManagementRow, 'picture_link_1' | 'picture_link_2' | 'picture_link_3' | 'picture_link_4' | 'is_active'>>,
+  ) => {
     setSavingImageId(id);
     const res = await fetch(`/api/cpq/setup/picture-management/${id}`, {
       method: 'PUT',
@@ -388,45 +397,75 @@ export default function CpqSetupPage() {
             </label>
             <label className="inlineCheck" style={{ marginBottom: 0 }}>
               <input type="checkbox" checked={onlyMissingPicture} onChange={(e) => setOnlyMissingPicture(e.target.checked)} />
-              Missing picture link only
+              Missing all picture links only
             </label>
           </div>
           {syncSummary && (
             <div className="note compactNote">
-              Scanned sampler rows: {syncSummary.sourceRowsScanned} | selectedOptions scanned: {syncSummary.selectedOptionsScanned} | distinct combos: {syncSummary.distinctCombinationsFound} | inserted: {syncSummary.inserted} | existing/skipped: {syncSummary.skippedExisting} | current total rows: {syncSummary.total}
+              Scanned sampler rows: {syncSummary.sourceRowsScanned} | selectedOptions scanned: {syncSummary.selectedOptionsScanned} | distinct combos: {syncSummary.distinctCombinationsFound} | inserted: {syncSummary.inserted} | already existing: {syncSummary.skippedExisting} | sampler rows marked processed: {syncSummary.samplerRowsMarkedProcessed} | unprocessed rows remaining: {syncSummary.unprocessedRowsRemaining} | sync errors: {syncSummary.syncErrors?.length ?? 0} | current total rows: {syncSummary.total}
             </div>
           )}
+          {syncSummary?.syncErrors?.length ? (
+            <div className="note compactNote" style={{ maxHeight: 130, overflow: 'auto' }}>
+              {syncSummary.syncErrors.map((message, index) => (
+                <div key={`${index}-${message}`}>{message}</div>
+              ))}
+            </div>
+          ) : null}
 
-          <div className="tableWrap" style={{ maxHeight: 520 }}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Feature label</th>
-                  <th>Option label</th>
-                  <th>Option value</th>
-                  <th>Picture link</th>
-                  <th>Active</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {imageRows.map((row) => (
-                  <tr key={row.id}>
-                    <td>{row.feature_label}</td>
-                    <td>{row.option_label}</td>
-                    <td>{row.option_value}</td>
-                    <td style={{ minWidth: 320 }}>
+          <div className="tableWrap" style={{ maxHeight: 520, padding: 8 }}>
+            <div className="pictureCards">
+              {imageRows.map((row) => (
+                <article className="pictureCard" key={row.id}>
+                  <div className="pictureCardHeader">
+                    <div><strong>Feature:</strong> {row.feature_label}</div>
+                    <div><strong>Option:</strong> {row.option_label}</div>
+                    <div><strong>Value:</strong> {row.option_value}</div>
+                  </div>
+                  <div className="pictureCardGrid">
+                    <label>Picture link 1
                       <input
-                        style={{ width: '100%' }}
-                        value={row.picture_link ?? ''}
-                        placeholder="https://cdn.example.com/layer.png"
+                        value={row.picture_link_1 ?? ''}
+                        placeholder="https://cdn.example.com/layer-1.png"
                         onChange={(e) => {
-                          const pictureLink = e.target.value;
-                          setImageRows((curr) => curr.map((item) => (item.id === row.id ? { ...item, picture_link: pictureLink } : item)));
+                          const pictureLink1 = e.target.value;
+                          setImageRows((curr) => curr.map((item) => (item.id === row.id ? { ...item, picture_link_1: pictureLink1 } : item)));
                         }}
                       />
-                    </td>
-                    <td>
+                    </label>
+                    <label>Picture link 2
+                      <input
+                        value={row.picture_link_2 ?? ''}
+                        placeholder="https://cdn.example.com/layer-2.png"
+                        onChange={(e) => {
+                          const pictureLink2 = e.target.value;
+                          setImageRows((curr) => curr.map((item) => (item.id === row.id ? { ...item, picture_link_2: pictureLink2 } : item)));
+                        }}
+                      />
+                    </label>
+                    <label>Picture link 3
+                      <input
+                        value={row.picture_link_3 ?? ''}
+                        placeholder="https://cdn.example.com/layer-3.png"
+                        onChange={(e) => {
+                          const pictureLink3 = e.target.value;
+                          setImageRows((curr) => curr.map((item) => (item.id === row.id ? { ...item, picture_link_3: pictureLink3 } : item)));
+                        }}
+                      />
+                    </label>
+                    <label>Picture link 4
+                      <input
+                        value={row.picture_link_4 ?? ''}
+                        placeholder="https://cdn.example.com/layer-4.png"
+                        onChange={(e) => {
+                          const pictureLink4 = e.target.value;
+                          setImageRows((curr) => curr.map((item) => (item.id === row.id ? { ...item, picture_link_4: pictureLink4 } : item)));
+                        }}
+                      />
+                    </label>
+                  </div>
+                  <div className="pictureCardActions">
+                    <label className="inlineCheck" style={{ marginBottom: 0 }}>
                       <input
                         type="checkbox"
                         checked={row.is_active}
@@ -435,21 +474,25 @@ export default function CpqSetupPage() {
                           setImageRows((curr) => curr.map((item) => (item.id === row.id ? { ...item, is_active: isActive } : item)));
                         }}
                       />
-                    </td>
-                    <td>
-                      <button disabled={savingImageId === row.id} onClick={() => void savePictureRow(row.id, { picture_link: row.picture_link, is_active: row.is_active })}>
-                        {savingImageId === row.id ? 'Saving…' : 'Save'}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {imageRows.length === 0 && (
-                  <tr>
-                    <td colSpan={6}>No picture-management rows found. Run sync to seed from sampler results.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                      Active
+                    </label>
+                    <button
+                      disabled={savingImageId === row.id}
+                      onClick={() => void savePictureRow(row.id, {
+                        picture_link_1: row.picture_link_1,
+                        picture_link_2: row.picture_link_2,
+                        picture_link_3: row.picture_link_3,
+                        picture_link_4: row.picture_link_4,
+                        is_active: row.is_active,
+                      })}
+                    >
+                      {savingImageId === row.id ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+                </article>
+              ))}
+              {imageRows.length === 0 && <div className="note compactNote">No picture-management rows found. Run sync to seed from sampler results.</div>}
+            </div>
           </div>
         </section>
       )}

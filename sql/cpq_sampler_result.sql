@@ -12,7 +12,9 @@ create table if not exists CPQ_sampler_result (
   header_id text,
   detail_id text,
   session_id text,
-  json_result jsonb not null
+  json_result jsonb not null,
+  processed_for_image_sync boolean not null default false,
+  processed_for_image_sync_at timestamptz
 );
 
 create index if not exists idx_cpq_sampler_result_ipn_code
@@ -26,3 +28,7 @@ create index if not exists idx_cpq_sampler_result_account_code
 
 create index if not exists idx_cpq_sampler_result_created_at_desc
   on CPQ_sampler_result (created_at desc);
+
+create index if not exists idx_cpq_sampler_result_image_sync_unprocessed
+  on CPQ_sampler_result (processed_for_image_sync, id)
+  where processed_for_image_sync = false;
