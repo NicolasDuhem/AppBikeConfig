@@ -6,7 +6,7 @@ import { InitConfiguratorRequest } from '../../../../lib/cpq/types';
 
 export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as Partial<InitConfiguratorRequest>;
-  const ruleset = body.ruleset ?? process.env.NEXT_PUBLIC_CPQ_RULESET ?? process.env.CPQ_PART_NAME ?? 'BBLV6_G-LineMY26';
+  const ruleset = body.ruleset ?? process.env.CPQ_PART_NAME ?? 'BBLV6_G-LineMY26';
 
   const requestPayload: InitConfiguratorRequest = {
     ruleset,
