@@ -1,86 +1,151 @@
 # CPQ Setup Guide
 
-## 1) Setup surfaces
+## Scope
+Operational/admin setup for CPQ in AppBikeConfig.
 
-- Admin/setup page: `/cpq/setup`
-- Bike-builder page: `/bike-builder`
+Primary UI:
+- `/cpq/setup` (account context, rulesets, picture management)
 
-`/cpq/setup` manages Neon tables used by CPQ runtime selection.
+Primary runtime consumer:
+- `/bike-builder`
 
-## 2) Account context setup
+---
 
-Table: `CPQ_setup_account_context`
+## 1) Prerequisites
 
-Required fields when creating/updating:
-- `account_code`
-- `customer_id`
-- `currency`
-- `language`
-- `country_code` (must be 2-letter ISO code, e.g. `GB`, `FR`, `DE`)
+### Environment
+Set integration variables:
+- `CPQ_API_KEY` (raw API key)
+- `CPQ_BASE_URL` (service base)
+- `CPQ_INSTANCE`
+- `CPQ_PROFILE`
 
-How it affects CPQ StartConfiguration:
-- `account_code` -> `Company` and `AccountCode`
-- `customer_id` -> `CustomerId`
-- `currency` -> `CurrencyCode`
-- `language` -> `LanguageCode`
-- `country_code` -> `CustomerLocation`
+### Database migrations
+Apply CPQ SQL scripts for:
+- setup tables (`CPQ_setup_account_context`, `CPQ_setup_ruleset`)
+- sampler table (`CPQ_sampler_result` + image sync flags)
+- image management (`cpq_image_management` and picture slots)
 
-## 3) Ruleset setup
+---
 
-Table: `CPQ_setup_ruleset`
+## 2) Account Context Setup (`CPQ_setup_account_context`)
 
-Core fields:
+In `/cpq/setup`, open **Account code management** and create active rows.
+
+Required fields:
+- account code
+- customer ID
+- currency
+- language
+- country code (2-letter ISO, e.g. `GB`)
+
+How it is used:
+- bike-builder loads active rows,
+- selected account context is passed into StartConfiguration integration parameters,
+- `country_code` maps to `CustomerLocation`.
+
+---
+
+## 3) Ruleset Setup (`CPQ_setup_ruleset`)
+
+In `/cpq/setup`, open **Ruleset management** and maintain records.
+
+Required fields:
 - `cpq_ruleset`
 - `namespace`
 - `header_id`
 
-Optional metadata:
-- `description`
-- `bike_type`
-- `sort_order`
+Recommended fields:
+- description
+- bike type
+- sort order
+- active flag
+
+How it is used:
+- bike-builder loads active rulesets,
+- selected row defines ruleset/part name, namespace, header ID for StartConfiguration.
+
+---
+
+## 4) Picture Management Setup (`cpq_image_management`)
+
+In `/cpq/setup`, open **Picture management**.
+
+Identity columns (read-only conceptual key):
+- `feature_label`
+- `option_label`
+- `option_value`
+
+Editable columns:
+- `picture_link_1`
+- `picture_link_2`
+- `picture_link_3`
+- `picture_link_4`
 - `is_active`
 
-How it affects CPQ StartConfiguration:
-- `cpq_ruleset` -> `part.name`
-- `namespace` -> `part.namespace`
-- `header_id` -> `headerDetail.headerId`
+Use valid image URLs for transparent PNG layer assets.
 
-## 4) Setup UI behavior
+---
 
-### Account management section
-- Create / edit / delete account context rows.
-- Toggle active flag.
-- Country code input is uppercased and validated to ISO-2 format.
+## 5) Sync Picture Rows from Sampler Results
 
-### Ruleset management section
-- Create / edit / delete ruleset rows.
-- Define namespace/header for each ruleset.
-- Control display/order with active + sort order.
+Use **Sync from sampler results** (POST `/api/cpq/setup/picture-management/sync`).
 
-## 5) Runtime selection behavior in bike-builder
+What sync does:
+1. Reads unprocessed `CPQ_sampler_result` rows.
+2. Extracts `json_result.selectedOptions[]`.
+3. Builds unique rows by `(featureLabel, optionLabel, optionValue)`.
+4. Inserts missing rows only.
+5. Marks source sampler rows as processed.
 
-1. Bike-builder loads active account contexts and rulesets.
-2. First active rows prefill current selections.
-3. Account selection changes CPQ context values.
-4. Ruleset selection triggers fresh StartConfiguration.
-5. Configure calls continue within returned session for manual/UI edits.
+What sync does **not** do:
+- does not overwrite existing picture links,
+- does not use feature_id / option_id identity.
 
-## 6) Sampler/traversal detail-session behavior
+---
 
-- Sampler keeps a base seed record (ruleset, namespace, header, account context, base detail/session).
-- For each sampled variant, sampler starts a fresh branch by calling StartConfiguration again.
-- Branch StartConfiguration uses:
-  - new `headerDetail.detailId` (new branch detailId)
-  - `sourceHeaderDetail.detailId` = base detailId (or parent detail when chaining).
-- Configure is used only after branch StartConfiguration to apply option changes.
-- Saved `CPQ_sampler_result` rows should contain branch detail/session values (not seed detail/session).
+## 6) Bike Builder Runtime Setup Consumption
 
-## 7) Integration settings still required in environment
+Bike-builder startup behavior:
+1. GET active account contexts.
+2. GET active rulesets.
+3. Auto-select first available account/ruleset.
+4. StartConfiguration with selected values.
 
-Set these env variables in runtime (local/Vercel):
-- `CPQ_API_KEY`
-- `CPQ_BASE_URL`
-- `CPQ_INSTANCE`
-- `CPQ_PROFILE`
+From this point:
+- manual option changes use Configure,
+- image layers resolve from current selected options against `cpq_image_management`.
 
-Keep `CPQ_BASE_URL` as service root (`.../json`), not endpoint-specific path.
+---
+
+## 7) Manual Save Setup Expectations
+
+The **Save Configuration** button on bike-builder expects:
+- a loaded CPQ state/session,
+- account/ruleset context values populated,
+- writable access to `CPQ_sampler_result`.
+
+Saved row includes context columns + full captured JSON (`source: manual-save`).
+
+---
+
+## 8) Recommended Admin Sequence for New Tenant
+
+1. Configure environment secrets/CPQ endpoint.
+2. Insert account context rows.
+3. Insert ruleset rows.
+4. Open bike-builder and verify StartConfiguration + Configure.
+5. Run sampler and/or manual save to populate `CPQ_sampler_result`.
+6. Run picture sync to seed `cpq_image_management`.
+7. Fill picture links in slots 1..4.
+8. Re-open bike-builder and verify layered preview updates as options change.
+
+---
+
+## 9) Role/Permission Expectations
+
+Setup endpoints use stricter role checks (`setup.manage` for mutations), while builder consumption endpoints use `builder.use`.
+
+Practical impact:
+- business users can run builder,
+- admin users maintain setup and picture mappings.
