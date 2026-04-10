@@ -39,6 +39,26 @@ export type CpqImageManagementRecord = {
   updated_at: string;
 };
 
+export type CpqImageSelectionLookup = {
+  featureLabel: string;
+  optionLabel: string;
+  optionValue: string;
+};
+
+export type CpqResolvedImageLayer = {
+  featureLabel: string;
+  optionLabel: string;
+  optionValue: string;
+  slot: 1 | 2 | 3 | 4;
+  pictureLink: string;
+};
+
+export type CpqImageLayerResolution = {
+  layers: CpqResolvedImageLayer[];
+  matchedSelections: CpqImageSelectionLookup[];
+  unmatchedSelections: CpqImageSelectionLookup[];
+};
+
 const parseBoolean = (value: unknown, fallback = true) => {
   if (typeof value === 'boolean') return value;
   if (typeof value === 'string') return value.toLowerCase() === 'true';
@@ -345,4 +365,97 @@ export async function syncImageManagementFromSampler() {
     unprocessedRowsRemaining: unprocessedRemainingRows[0]?.total ?? 0,
     total: totalRows[0]?.total ?? 0,
   };
+}
+
+export async function resolveImageLayersForSelectedOptions(
+  selectedOptions: CpqImageSelectionLookup[],
+): Promise<CpqImageLayerResolution> {
+  const normalizedSelections = selectedOptions
+    .map((selection) => ({
+      featureLabel: asTrimmedText(selection.featureLabel),
+      optionLabel: asTrimmedText(selection.optionLabel),
+      optionValue: asTrimmedText(selection.optionValue),
+    }))
+    .filter((selection) => selection.featureLabel && selection.optionLabel && selection.optionValue);
+
+  if (!normalizedSelections.length) {
+    return { layers: [], matchedSelections: [], unmatchedSelections: [] };
+  }
+
+  const selectionJson = JSON.stringify(
+    normalizedSelections.map((selection) => ({
+      feature_label: selection.featureLabel,
+      option_label: selection.optionLabel,
+      option_value: selection.optionValue,
+    })),
+  );
+
+  const rows = (await sql`
+    with selected_options as (
+      select
+        row_number() over () as selection_order,
+        s.feature_label,
+        s.option_label,
+        s.option_value
+      from jsonb_to_recordset(${selectionJson}::jsonb) as s(feature_label text, option_label text, option_value text)
+    )
+    select
+      s.selection_order,
+      s.feature_label,
+      s.option_label,
+      s.option_value,
+      m.id as match_id,
+      m.picture_link_1,
+      m.picture_link_2,
+      m.picture_link_3,
+      m.picture_link_4
+    from selected_options s
+    left join cpq_image_management m
+      on m.feature_label = s.feature_label
+      and m.option_label = s.option_label
+      and m.option_value = s.option_value
+      and m.is_active = true
+    order by s.selection_order
+  `) as Array<{
+    selection_order: number;
+    feature_label: string;
+    option_label: string;
+    option_value: string;
+    match_id: number | null;
+    picture_link_1: string | null;
+    picture_link_2: string | null;
+    picture_link_3: string | null;
+    picture_link_4: string | null;
+  }>;
+
+  const layers: CpqResolvedImageLayer[] = [];
+  const matchedSelections: CpqImageSelectionLookup[] = [];
+  const unmatchedSelections: CpqImageSelectionLookup[] = [];
+
+  for (const row of rows) {
+    const selection = {
+      featureLabel: row.feature_label,
+      optionLabel: row.option_label,
+      optionValue: row.option_value,
+    };
+
+    if (!row.match_id) {
+      unmatchedSelections.push(selection);
+      continue;
+    }
+
+    matchedSelections.push(selection);
+    const pictureLinks = [row.picture_link_1, row.picture_link_2, row.picture_link_3, row.picture_link_4];
+    pictureLinks.forEach((pictureLink, index) => {
+      const value = asTrimmedText(pictureLink);
+      if (!value) return;
+      layers.push({
+        ...selection,
+        slot: (index + 1) as 1 | 2 | 3 | 4,
+        pictureLink: value,
+      });
+    });
+  }
+
+  return { layers, matchedSelections, unmatchedSelections };
 }
