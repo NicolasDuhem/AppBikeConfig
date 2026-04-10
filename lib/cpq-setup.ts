@@ -25,6 +25,19 @@ export type CpqRulesetRecord = {
   updated_at: string;
 };
 
+export type CpqImageManagementRecord = {
+  id: number;
+  feature_label: string;
+  option_label: string;
+  option_value: string;
+  feature_id: string | null;
+  option_id: string | null;
+  picture_link: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
 const parseBoolean = (value: unknown, fallback = true) => {
   if (typeof value === 'boolean') return value;
   if (typeof value === 'string') return value.toLowerCase() === 'true';
@@ -32,6 +45,10 @@ const parseBoolean = (value: unknown, fallback = true) => {
 };
 
 const asTrimmedText = (value: unknown) => String(value ?? '').trim();
+const asNullableTrimmedText = (value: unknown) => {
+  const trimmed = asTrimmedText(value);
+  return trimmed.length ? trimmed : null;
+};
 const ISO2_COUNTRY_REGEX = /^[A-Z]{2}$/;
 
 export async function listAccountContexts(activeOnly = false) {
@@ -173,4 +190,82 @@ export async function updateRuleset(id: number, input: Record<string, unknown>) 
 
 export async function deleteRuleset(id: number) {
   await sql`delete from CPQ_setup_ruleset where id = ${id}`;
+}
+
+export async function listImageManagementRows(filters: { featureLabel?: string; onlyMissingPicture?: boolean } = {}) {
+  const featureLabel = asTrimmedText(filters.featureLabel);
+  const onlyMissingPicture = Boolean(filters.onlyMissingPicture);
+
+  return (await sql`
+    select id, feature_label, option_label, option_value, feature_id, option_id, picture_link, is_active, created_at, updated_at
+    from cpq_image_management
+    where (${featureLabel} = '' or feature_label ilike ${`%${featureLabel}%`})
+      and (not ${onlyMissingPicture} or picture_link is null or btrim(picture_link) = '')
+    order by feature_label, option_label, option_value
+  `) as CpqImageManagementRecord[];
+}
+
+export async function updateImageManagementRow(id: number, input: Record<string, unknown>) {
+  const pictureLink = asNullableTrimmedText(input.picture_link);
+  const isActive = parseBoolean(input.is_active, true);
+
+  const rows = (await sql`
+    update cpq_image_management
+    set picture_link = ${pictureLink},
+        is_active = ${isActive}
+    where id = ${id}
+    returning id, feature_label, option_label, option_value, feature_id, option_id, picture_link, is_active, created_at, updated_at
+  `) as CpqImageManagementRecord[];
+
+  return rows[0] ?? null;
+}
+
+export async function syncImageManagementFromSampler() {
+  const insertedRows = (await sql`
+    with distinct_options as (
+      select distinct
+        btrim(opt ->> 'featureLabel') as feature_label,
+        btrim(opt ->> 'optionLabel') as option_label,
+        btrim(opt ->> 'optionValue') as option_value,
+        nullif(btrim(opt ->> 'featureId'), '') as feature_id,
+        nullif(btrim(opt ->> 'optionId'), '') as option_id
+      from CPQ_sampler_result src
+      cross join lateral jsonb_array_elements(
+        case
+          when jsonb_typeof(src.json_result -> 'selectedOptions') = 'array' then src.json_result -> 'selectedOptions'
+          else '[]'::jsonb
+        end
+      ) as opt
+      where btrim(opt ->> 'featureLabel') <> ''
+        and btrim(opt ->> 'optionLabel') <> ''
+        and btrim(opt ->> 'optionValue') <> ''
+    ),
+    upserted as (
+      insert into cpq_image_management (feature_label, option_label, option_value, feature_id, option_id)
+      select feature_label, option_label, option_value, feature_id, option_id
+      from distinct_options
+      on conflict (feature_label, option_label, option_value) do update
+      set feature_id = coalesce(cpq_image_management.feature_id, excluded.feature_id),
+          option_id = coalesce(cpq_image_management.option_id, excluded.option_id)
+      where cpq_image_management.feature_id is null
+         or cpq_image_management.option_id is null
+      returning xmax = 0 as inserted
+    )
+    select inserted
+    from upserted
+  `) as Array<{ inserted: boolean }>;
+
+  const rows = (await sql`
+    select count(*)::int as total
+    from cpq_image_management
+  `) as Array<{ total: number }>;
+
+  const inserted = insertedRows.filter((row) => row.inserted).length;
+  const updated = insertedRows.length - inserted;
+
+  return {
+    inserted,
+    updated,
+    total: rows[0]?.total ?? 0,
+  };
 }
