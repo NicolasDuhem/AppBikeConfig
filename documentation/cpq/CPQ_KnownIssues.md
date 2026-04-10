@@ -82,3 +82,18 @@ Observed pattern:
 Practical guidance:
 - treat Vercel type-check failures as code defects first.
 - verify route/helper signatures whenever smoke/helper APIs change.
+
+## 8) Sampler configured with configure-only chaining (INVALID)
+
+Pitfall:
+- sampling multiple variants by repeatedly calling Configure from one root StartConfiguration.
+
+Consequence:
+- many sampled rows reuse the same detail chain/session lineage.
+- `CPQ_sampler_result.detail_id` does not represent a unique branch detail per variant.
+
+Correct behavior:
+- call StartConfiguration for each sampled branch with a fresh `headerDetail.detailId`.
+- set `sourceHeaderDetail.detailId` to base/parent detail when cloning branch context.
+- then call Configure only within that branch session.
+- persist branch detail/session metadata (`baseDetailId`, `sourceDetailId`, `branchDetailId`) in result JSON.

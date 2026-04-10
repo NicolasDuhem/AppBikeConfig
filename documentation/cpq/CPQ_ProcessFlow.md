@@ -57,11 +57,29 @@ Two runtime modes exist in bike-builder:
 Shared principle:
 - traversal uses the same configure API flow as manual selection.
 
-High-level behavior:
-1. Start from active state.
-2. Iterate traversable features/options.
-3. For each change, call Configure.
-4. Save result snapshot (session, detail, selected options, ipn, price, traversal metadata).
+Sampler mode (fresh branch per sampled variant):
+1. Start from active seed state and keep a seed context record:
+   - `baseDetailId`, `baseSessionId`
+   - selected ruleset/namespace/header
+   - account context values.
+2. For each sampled option branch:
+   - generate a new branch detail GUID (`branchDetailId`)
+   - call StartConfiguration again with:
+     - `headerDetail.detailId = branchDetailId`
+     - `sourceHeaderDetail.detailId = baseDetailId` (or branch parent detail when chaining)
+   - this creates a fresh CPQ detail/session context for that sample.
+3. Run Configure only after branch StartConfiguration to apply option changes.
+4. Save sampled result with:
+   - `baseDetailId`
+   - `sourceDetailId`
+   - `branchDetailId` (also stored as row `detail_id`)
+   - branch `sessionId`
+   - selected options/IPN/raw JSON snapshot.
+
+Why this is required:
+- Configure is session-driven and does not accept a detailId in payload.
+- New detail contexts are established through StartConfiguration.
+- Configure-only branching keeps results in one long-running session/detail chain.
 
 UI-hierarchical traversal branch behavior:
 1. Fresh StartConfiguration per branch root.
