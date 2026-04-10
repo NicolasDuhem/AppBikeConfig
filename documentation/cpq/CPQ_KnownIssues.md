@@ -1,99 +1,166 @@
-# CPQ Known Issues and Pitfalls
+# CPQ Known Issues and Lessons Learned
 
-## 1) Wrong endpoint usage
+## Scope
+Historical pitfalls and current guardrails for AppBikeConfig CPQ implementation.
 
-Invalid pattern:
-- Mingle/ION-style endpoints for configurator UI calls.
+---
 
-Working pattern:
-- Direct ProductConfiguratorUI JSON service:
-  - `.../ProductConfiguratorUI.svc/json/StartConfiguration`
-  - `.../ProductConfiguratorUI.svc/json/configure`
+## 1) Wrong Endpoint / Wrong Base URL
 
-## 2) Wrong base URL composition
+### Symptom
+- auth challenges / route failures / non-functional StartConfiguration.
 
-Pitfall:
-- Storing `CPQ_BASE_URL` with `/StartConfiguration` included.
+### Root cause
+- using non-service CPQ path style (e.g., ION/Mingle patterns), or malformed base URL.
 
-Consequence:
-- doubled path like `/StartConfiguration/StartConfiguration`.
+### Correct rule
+Use direct CPQ service base:
 
-Correct:
-- `CPQ_BASE_URL` must end at `/json` service root only.
+```text
+https://configurator.eu1.inforcloudsuite.com/api/v4/ProductConfiguratorUI.svc/json
+```
 
-## 3) Session ID trimming (INVALID)
+Then append:
+- `/StartConfiguration`
+- `/configure`
 
-Invalid behavior (removed):
-- splitting session id on `~`
-- using only trailing segment
-- debug toggle to trim before Configure
+Do not store `/StartConfiguration` inside `CPQ_BASE_URL`.
 
-Correct behavior:
-- pass full session ID exactly as returned by CPQ.
+---
 
-Example valid full session:
-- `BROMPTON_TRN~BROMPTON_TRN~5fad26cc-c3cb-484b-a087-5b21d6239b4a`
+## 2) Wrong Configure Payload Shape
 
-## 4) Incorrect configure payload shape
+### Symptom
+- option changes reset or behave unpredictably.
 
-Pitfalls:
-- sending entire config state back
-- sending synthetic/over-specified structures
-- multi-change payloads for simple dropdown actions
+### Root cause
+- sending full selection sets, guessed blocks, or wrong field semantics.
 
-Correct baseline:
-- one changed selection with `id` + `value`.
+### Correct rule
+Configure payload must be:
+- `sessionID`
+- `selections` array containing exactly one changed item
+- `id = feature id`
+- `value = selected option value`
 
-## 5) Wrong selected-option reconstruction
+---
 
-Pitfall:
-- selecting by wrong identity or first option too eagerly.
+## 3) Session Trimming Is Invalid
 
-Consequence:
-- dropdown snaps back to old/default/first value.
+### Symptom
+- Configure fails or state diverges.
 
-Correct:
-- determine selected option by matching feature current value to option value.
-- fallback only when exact match missing.
+### Root cause
+- trimming/splitting/reconstructing CPQ session string.
 
-## 6) Duplicate feature parsing
+### Correct rule
+Use session ID exactly as returned by CPQ.
 
-Pitfall:
-- collecting repeated feature candidates without stable dedupe.
+---
 
-Consequence:
-- duplicate dropdowns and inconsistent UI state.
+## 4) Selected Option Reset / Snapback
 
-Correct dedupe priority:
-1. `CustomProperties.FeatureID`
+### Symptom
+- UI reverts to first/default option after Configure.
+
+### Root cause
+- incorrect selected-option matching logic.
+
+### Correct rule
+Match selected option by:
+
+```text
+ScreenOption.Value === SelectableValue.Value
+```
+
+Only fallback to first visible+enabled if no match exists.
+
+---
+
+## 5) Duplicate Features in UI
+
+### Symptom
+- repeated dropdowns for same logical feature.
+
+### Root cause
+- flat parsing without stable dedupe key and candidate scoring.
+
+### Correct rule
+Dedupe by stable key priority:
+1. `FeatureID`
 2. `ScreenOption.Name`
 3. `ScreenOption.ID`
 
-Tie-breakers:
-- visible > hidden
-- richer option list > poorer
-- earliest candidate as final tie-breaker
+Favor visible/richer candidates.
 
-## 7) Deployment/type issues
+---
 
-Observed pattern:
-- build failures caused by TypeScript signature mismatches (compile-time), not CPQ credentials.
+## 6) Configure Does Not Create New Detail IDs
 
-Practical guidance:
-- treat Vercel type-check failures as code defects first.
-- verify route/helper signatures whenever smoke/helper APIs change.
+### Symptom
+- expecting independent branch detail IDs from Configure-only traversal.
 
-## 8) Sampler configured with configure-only chaining (INVALID)
+### Root cause
+- misunderstanding CPQ session behavior.
 
-Pitfall:
-- sampling multiple variants by repeatedly calling Configure from one root StartConfiguration.
+### Correct rule
+To get branch detail lineage:
+- call StartConfiguration with new `headerDetail.detailId`,
+- pass source via `sourceHeaderDetail.detailId`,
+- then Configure branch selections.
 
-Consequence:
-- many sampled rows reuse the same detail chain/session lineage.
-- `CPQ_sampler_result.detail_id` does not represent a unique branch detail per variant.
+---
 
-Correct behavior:
-- call StartConfiguration for each sampled branch with a fresh `headerDetail.detailId`.
-- set `sourceHeaderDetail.detailId` to base/parent detail when cloning branch context.
-- then call Configure only within that branch session.
-- persist branch detail/session metadata (`baseDetailId`, `sourceDetailId`, `branchDetailId`) in result JSON.
+## 7) Picture Management Identity Mistake
+
+### Symptom
+- excessive duplicate picture mapping rows.
+
+### Root cause
+- identity based on `feature_id` / `option_id` instead of business-stable labels/values.
+
+### Correct rule
+Use unique identity:
+- `feature_label`
+- `option_label`
+- `option_value`
+
+---
+
+## 8) Picture Sync Scalability
+
+### Symptom
+- sync cost grows over time when all sampler rows are rescanned.
+
+### Fix
+Use incremental markers on sampler rows:
+- `processed_for_image_sync`
+- `processed_for_image_sync_at`
+
+Sync reads only unprocessed rows and marks processed rows after handling.
+
+---
+
+## 9) Vercel/Deployment Confusion
+
+### Symptom
+- deploy failures incorrectly attributed to env settings.
+
+### Root cause
+- TypeScript signature/type mismatches in code.
+
+### Lesson
+Always check build/type diagnostics first; not every deployment issue is a CPQ credential/config issue.
+
+---
+
+## 10) Practical Debug Checklist
+
+When diagnosing CPQ runtime issues, verify in this order:
+1. `CPQ_BASE_URL` and endpoint composition.
+2. `Authorization: ApiKey <raw_key>` formatting.
+3. StartConfiguration payload part/header/context values.
+4. Configure payload (one changed selection only).
+5. sessionID unchanged between response and next request.
+6. selected-option matching + dedupe parser behavior.
+7. image sync flags and mapping existence for preview layers.
