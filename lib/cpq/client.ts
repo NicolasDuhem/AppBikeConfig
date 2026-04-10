@@ -232,12 +232,8 @@ export const configureConfiguration = async (
   request: ConfigureConfiguratorRequest,
   context: Record<string, unknown>,
 ): Promise<CpqApiEnvelope> => {
-  const configureSessionId = request.trimSessionIdBeforeConfigure
-    ? request.sessionId.split('~').pop() ?? request.sessionId
-    : request.sessionId;
-
   const body = {
-    sessionID: configureSessionId,
+    sessionID: request.sessionId,
     selections: [
       {
         id: request.featureId,
