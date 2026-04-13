@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireApiRole } from '@/lib/api-auth';
 import { resolveImageLayersForSelectedOptions } from '@/lib/cpq-setup';
 
 type SelectedOptionInput = {
@@ -9,8 +8,6 @@ type SelectedOptionInput = {
 };
 
 export async function POST(req: NextRequest) {
-  const auth = await requireApiRole('builder.use');
-  if (auth instanceof NextResponse) return auth;
 
   const body = (await req.json().catch(() => ({}))) as { selectedOptions?: SelectedOptionInput[] };
   const selectedOptions = Array.isArray(body.selectedOptions) ? body.selectedOptions : [];

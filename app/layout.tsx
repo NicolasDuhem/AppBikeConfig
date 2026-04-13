@@ -1,10 +1,9 @@
 import './globals.css';
-import LogoutButton from '@/components/logout-button';
 import AppNavigation from '@/components/app-navigation';
 
 export const metadata = {
-  title: 'Brompton AppBikeConfig',
-  description: 'Bike configurator starter'
+  title: 'TP2 CPQ App',
+  description: 'CPQ-only bike builder and setup console',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -15,11 +14,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <header className="brandbar">
             <div>
               <div className="brandtitle">Brompton</div>
-              <div className="brandSubtitle">AppBikeConfig · Admin Console</div>
-            </div>
-            <div className="brandMeta">
-              <div>Brand colour #002FA7</div>
-              <LogoutButton />
+              <div className="brandSubtitle">TP2 CPQ App</div>
             </div>
           </header>
           <AppNavigation />

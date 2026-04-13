@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireApiRole } from '@/lib/api-auth';
 import { createRuleset, listRulesets } from '@/lib/cpq-setup';
 
 export async function GET(req: NextRequest) {
-  const auth = await requireApiRole('builder.use');
-  if (auth instanceof NextResponse) return auth;
 
   const activeOnly = req.nextUrl.searchParams.get('activeOnly') === 'true';
   const rows = await listRulesets(activeOnly);
@@ -12,8 +9,6 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireApiRole('setup.manage');
-  if (auth instanceof NextResponse) return auth;
 
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
 
