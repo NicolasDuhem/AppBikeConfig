@@ -1,5 +1,5 @@
 import './globals.css';
-import AppNavigation from '@/components/app-navigation';
+import AppNavigation from '@/components/shared/app-navigation';
 
 export const metadata = {
   title: 'TP2 CPQ App',

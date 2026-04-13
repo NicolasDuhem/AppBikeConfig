@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { persistSamplerResult } from '@/lib/cpq/persistence';
+import { persistSamplerResult } from '@/lib/cpq/runtime/persistence';
 
 export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;

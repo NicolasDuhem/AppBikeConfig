@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { deleteAccountContext, updateAccountContext } from '@/lib/cpq-setup';
+import { deleteAccountContext, updateAccountContext } from '@/lib/cpq/setup/service';
 
 type Params = { params: { id: string } };
 

@@ -73,3 +73,32 @@ Use a **fresh baseline** migration strategy for `tp2-cpq-app`:
 3. Provision PostgreSQL database and apply `sql/schema.sql` + `sql/seed.sql`.
 4. Set runtime env vars in deployment target.
 5. Optionally add auth layer (reverse proxy or app-level) based on target security model.
+
+## Second-pass structural cleanup
+
+### Goal
+Reorganize the already-retained CPQ-only scope into a clean migration-ready structure for the future `tp2-cpq-app` repository, without changing business behavior.
+
+### Structural actions completed
+- Moved runtime CPQ integration code into `lib/cpq/runtime`.
+- Moved setup data/service logic into `lib/cpq/setup/service.ts`.
+- Moved results read model into `lib/cpq/results/service.ts`.
+- Moved DB connector into `lib/db/client.ts`.
+- Introduced centralized type files:
+  - `types/cpq.ts`
+  - `types/setup.ts`
+- Converted route files under `app/` to thin wrappers where possible, moving heavier UI pages into:
+  - `components/cpq/*`
+  - `components/setup/*`
+  - `components/shared/*`
+
+### Route cleanup decision
+- `/cpq` is now the canonical Bike Builder route.
+- `/bike-builder` is retained strictly as a compatibility alias and now redirects to `/cpq`.
+
+### Documentation cleanup
+- Consolidated retained documentation under `docs/`.
+- Added `docs/REPO_STRUCTURE.md` to describe final folder responsibilities and migration boundaries.
+
+### Migration-readiness outcome
+The repository now reads as a standalone CPQ app (runtime, setup, results, DB, types, SQL, docs) with reduced monolith-era naming ambiguity and clearer code ownership by domain.

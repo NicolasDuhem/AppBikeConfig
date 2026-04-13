@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { configureConfiguration } from '../../../../lib/cpq/client';
-import { mapCpqToNormalizedState } from '../../../../lib/cpq/mappers';
-import { mockConfigureState, mockInitState } from '../../../../lib/cpq/mock-data';
-import { BikeBuilderContext, ConfigureConfiguratorRequest, NormalizedBikeBuilderState } from '../../../../lib/cpq/types';
+import { configureConfiguration } from '@/lib/cpq/runtime/client';
+import { mapCpqToNormalizedState } from '@/lib/cpq/runtime/mappers';
+import { mockConfigureState, mockInitState } from '@/lib/cpq/runtime/mock-data';
+import { BikeBuilderContext, ConfigureConfiguratorRequest, NormalizedBikeBuilderState } from '@/types/cpq';
 const buildContext = (input?: Partial<BikeBuilderContext>) => ({
   accountCode: input?.accountCode ?? '',
   customerId: input?.customerId,

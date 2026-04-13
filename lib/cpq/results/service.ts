@@ -1,5 +1,6 @@
-import { sql } from '@/lib/db';
-import { resolveImageLayersForSelectedOptions, type CpqResolvedImageLayer, type CpqImageSelectionLookup } from '@/lib/cpq-setup';
+import { sql } from '@/lib/db/client';
+import { resolveImageLayersForSelectedOptions } from '@/lib/cpq/setup/service';
+import { CpqImageSelectionLookup, CpqResolvedImageLayer } from '@/types/setup';
 
 type SamplerRow = {
   id: number;

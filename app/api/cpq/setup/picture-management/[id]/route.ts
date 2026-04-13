@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { updateImageManagementRow } from '@/lib/cpq-setup';
+import { updateImageManagementRow } from '@/lib/cpq/setup/service';
 
 type Params = { params: { id: string } };
 

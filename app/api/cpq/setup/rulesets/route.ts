@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createRuleset, listRulesets } from '@/lib/cpq-setup';
+import { createRuleset, listRulesets } from '@/lib/cpq/setup/service';
 
 export async function GET(req: NextRequest) {
 
