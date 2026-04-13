@@ -1,101 +1,73 @@
-create table if not exists cpq_countries (
-  id bigserial primary key,
-  country text not null unique,
-  region text not null,
-  brake_type text not null check (brake_type in ('reverse', 'non_reverse')),
-  locale_code text not null default 'en-US',
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
+-- tp2-cpq-app minimal baseline schema
 
-create table if not exists cpq_sku_rules (
+create table if not exists CPQ_setup_account_context (
   id bigserial primary key,
-  cpq_product_id bigint references cpq_products(id) on delete set null,
-  sku_code text not null,
-  cpq_ruleset text not null,
-  brake_type text not null check (brake_type in ('reverse', 'non_reverse')),
-  bike_type text,
-  handlebar text,
-  speed text,
-  rack text,
-  colour text,
-  light text,
-  seatpost_length text,
-  saddle text,
-  description text,
-  bc_status text not null default '' check (bc_status in ('', 'ok', 'nok')),
+  account_code text not null unique,
+  customer_id text not null,
+  currency text not null,
+  language text not null,
+  country_code char(2) not null,
   is_active boolean not null default true,
-  deactivated_at timestamptz,
-  deactivation_reason text,
-  created_by bigint references app_users(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint cpq_setup_account_context_country_code_chk check (country_code ~ '^[A-Z]{2}$')
+);
+
+create table if not exists CPQ_setup_ruleset (
+  id bigserial primary key,
+  cpq_ruleset text not null unique,
+  description text,
+  bike_type text,
+  namespace text not null default 'Default',
+  header_id text not null default 'Simulator',
+  is_active boolean not null default true,
+  sort_order integer not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
-create unique index if not exists cpq_sku_rules_active_unique
-  on cpq_sku_rules (lower(sku_code), lower(cpq_ruleset), brake_type)
-  where is_active = true;
-
-create table if not exists cpq_availability (
-  cpq_sku_rule_id bigint not null references cpq_sku_rules(id) on delete cascade,
-  cpq_country_id bigint not null references cpq_countries(id) on delete cascade,
-  available boolean not null default false,
-  updated_at timestamptz not null default now(),
-  primary key (cpq_sku_rule_id, cpq_country_id)
-);
-
-create table if not exists permissions (
+create table if not exists CPQ_sampler_result (
   id bigserial primary key,
-  permission_key text not null unique,
-  permission_name text not null,
-  description text,
+  ipn_code text,
+  ruleset text not null,
+  account_code text not null,
+  customer_id text,
+  currency text,
+  language text,
+  country_code text,
+  namespace text,
+  header_id text,
+  detail_id text,
+  session_id text,
+  json_result jsonb not null default '{}'::jsonb,
+  processed_for_image_sync boolean not null default false,
+  processed_for_image_sync_at timestamptz,
   created_at timestamptz not null default now()
 );
 
-create table if not exists role_permissions (
-  role_key text not null references roles(role_key) on delete cascade,
-  permission_id bigint not null references permissions(id) on delete cascade,
-  primary key (role_key, permission_id)
-);
+create index if not exists cpq_sampler_result_ipn_created_idx
+  on CPQ_sampler_result (ipn_code, created_at desc, id desc);
+create index if not exists cpq_sampler_result_filter_idx
+  on CPQ_sampler_result (ruleset, account_code, country_code);
+create index if not exists cpq_sampler_result_unprocessed_idx
+  on CPQ_sampler_result (processed_for_image_sync)
+  where processed_for_image_sync = false;
 
-create table if not exists role_permission_baselines_audit (
+create table if not exists cpq_image_management (
   id bigserial primary key,
-  role_key text not null references roles(role_key) on delete cascade,
-  permission_key text not null,
-  granted boolean not null,
-  changed_by bigint references app_users(id),
-  changed_at timestamptz not null default now()
-);
-
-create table if not exists user_permissions (
-  user_id bigint not null references app_users(id) on delete cascade,
-  permission_id bigint not null references permissions(id) on delete cascade,
-  granted boolean not null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  primary key (user_id, permission_id)
-);
-
-create table if not exists sku_digit_option_config (
-  id bigserial primary key,
-  digit_position integer not null unique check (digit_position between 1 and 30),
-  option_name text not null,
-  is_required boolean not null default false,
-  selection_mode text not null default 'single' check (selection_mode in ('single', 'multi')),
+  feature_label text not null,
+  option_label text not null,
+  option_value text not null,
+  picture_link_1 text,
+  picture_link_2 text,
+  picture_link_3 text,
+  picture_link_4 text,
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  unique (feature_label, option_label, option_value)
 );
 
-create table if not exists sku_generation_dependency_rules (
-  id bigserial primary key,
-  source_digit_position integer not null check (source_digit_position between 1 and 30),
-  target_digit_position integer not null check (target_digit_position between 1 and 30),
-  rule_type text not null check (rule_type in ('match_code')),
-  active boolean not null default true,
-  sort_order integer not null default 0,
-  notes text,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (source_digit_position, target_digit_position, rule_type)
-);
+create index if not exists cpq_image_management_lookup_idx
+  on cpq_image_management (feature_label, option_label, option_value)
+  where is_active = true;

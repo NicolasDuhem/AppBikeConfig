@@ -1,12 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireApiRole } from '@/lib/api-auth';
 import { deleteRuleset, updateRuleset } from '@/lib/cpq-setup';
 
 type Params = { params: { id: string } };
 
 export async function PUT(req: NextRequest, { params }: Params) {
-  const auth = await requireApiRole('setup.manage');
-  if (auth instanceof NextResponse) return auth;
 
   const id = Number(params.id);
   if (!Number.isFinite(id)) return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
@@ -23,8 +20,6 @@ export async function PUT(req: NextRequest, { params }: Params) {
 }
 
 export async function DELETE(_req: NextRequest, { params }: Params) {
-  const auth = await requireApiRole('setup.manage');
-  if (auth instanceof NextResponse) return auth;
 
   const id = Number(params.id);
   if (!Number.isFinite(id)) return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
