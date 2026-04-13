@@ -1,4 +1,4 @@
-import { sql } from '@/lib/db';
+import { sql } from '@/lib/db/client';
 
 export type PersistedSamplerResultInput = {
   ipn_code?: string | null;

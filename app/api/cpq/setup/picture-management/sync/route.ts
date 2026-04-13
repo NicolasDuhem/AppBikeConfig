@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { syncImageManagementFromSampler } from '@/lib/cpq-setup';
+import { syncImageManagementFromSampler } from '@/lib/cpq/setup/service';
 
 export async function POST() {
 

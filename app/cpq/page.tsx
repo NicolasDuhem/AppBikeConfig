@@ -1,1 +1,3 @@
-export { default } from '../bike-builder/page';
+import BikeBuilderPage from '@/components/cpq/bike-builder-page';
+
+export default BikeBuilderPage;

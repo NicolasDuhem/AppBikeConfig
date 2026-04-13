@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createAccountContext, listAccountContexts } from '@/lib/cpq-setup';
+import { createAccountContext, listAccountContexts } from '@/lib/cpq/setup/service';
 
 export async function GET(req: NextRequest) {
 

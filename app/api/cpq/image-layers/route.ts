@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { resolveImageLayersForSelectedOptions } from '@/lib/cpq-setup';
+import { resolveImageLayersForSelectedOptions } from '@/lib/cpq/setup/service';
 
 type SelectedOptionInput = {
   featureLabel?: unknown;

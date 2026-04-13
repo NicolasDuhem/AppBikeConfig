@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { startConfiguration } from '../../../../lib/cpq/client';
-import { buildStartConfigurationPayload } from '../../../../lib/cpq/config';
-import { mapCpqToNormalizedState } from '../../../../lib/cpq/mappers';
-import { mockInitState } from '../../../../lib/cpq/mock-data';
-import { InitConfiguratorRequest } from '../../../../lib/cpq/types';
+import { startConfiguration } from '@/lib/cpq/runtime/client';
+import { buildStartConfigurationPayload } from '@/lib/cpq/runtime/config';
+import { mapCpqToNormalizedState } from '@/lib/cpq/runtime/mappers';
+import { mockInitState } from '@/lib/cpq/runtime/mock-data';
+import { InitConfiguratorRequest } from '@/types/cpq';
 
 export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as Partial<InitConfiguratorRequest>;

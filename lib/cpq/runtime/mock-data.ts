@@ -1,4 +1,4 @@
-import { NormalizedBikeBuilderState } from './types';
+import { NormalizedBikeBuilderState } from '@/types/cpq';
 
 export const mockInitState = (ruleset: string): NormalizedBikeBuilderState => ({
   sessionId: 'mock-session-1',

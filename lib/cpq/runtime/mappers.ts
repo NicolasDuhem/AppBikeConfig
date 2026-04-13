@@ -1,4 +1,4 @@
-import { BikeBuilderFeature, BikeBuilderFeatureOption, CpqApiEnvelope, NormalizedBikeBuilderState } from './types';
+import { BikeBuilderFeature, BikeBuilderFeatureOption, CpqApiEnvelope, NormalizedBikeBuilderState } from '@/types/cpq';
 
 const asArray = (value: unknown): Record<string, unknown>[] => {
   if (!Array.isArray(value)) return [];

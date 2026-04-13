@@ -1,5 +1,5 @@
 import { buildStartConfigurationPayload, readCpqConfig, StartConfigurationOverrides } from './config';
-import { ConfigureConfiguratorRequest, CpqApiEnvelope, InitConfiguratorRequest } from './types';
+import { ConfigureConfiguratorRequest, CpqApiEnvelope, InitConfiguratorRequest } from '@/types/cpq';
 
 type CpqRequestResult = {
   status: number;
